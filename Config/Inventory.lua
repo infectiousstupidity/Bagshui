@@ -2,227 +2,223 @@
 -- Exposes: Bagshui.config.Inventory
 
 Bagshui:AddComponent(function()
+  -- Each key is an inventory type enum value and the value is a table of Inventory class properties.
+  -- See the `classObj` definition in Components\Inventory.lua for details.
+  -- Note that key bindings need to be defined in Bindings.xml.
+  ---@type table<BS_INVENTORY_TYPE, table<string, any>>
+  Bagshui.config.Inventory = {
 
--- Each key is an inventory type enum value and the value is a table of Inventory class properties.
--- See the `classObj` definition in Components\Inventory.lua for details.
--- Note that key bindings need to be defined in Bindings.xml.
----@type table<BS_INVENTORY_TYPE, table<string, any>>
-Bagshui.config.Inventory = {
+    [BS_INVENTORY_TYPE.BAGS] = {
 
-	[BS_INVENTORY_TYPE.BAGS] = {
+      -- Backpack (16) + (4 Bag Slots * 20 slot bags)
+      -- Some Vanilla implementations have larger bags available, but the
+      -- Inventory class will handle that automatically.
+      initialItemSlotButtons = 96,
 
-		-- Backpack (16) + (4 Bag Slots * 20 slot bags)
-		-- Some Vanilla implementations have larger bags available, but the
-		-- Inventory class will handle that automatically.
-		initialItemSlotButtons = 96,
+      -- Append bags 1 through NUM_BAG_SLOTS to `containerIds` array when it is
+      -- built at the end of this file.
+      containerIdRange = { 1, _G.NUM_BAG_SLOTS },
+      -- XML template for bag buttons.
+      bagButtonTemplate = "BagshuiBagsContainerTemplate",
+      -- Bag button inventory IDs are all offset by the same amount, starting
+      -- with the Backpack.
+      bagButtonIdOffset = _G.ContainerIDToInventoryID(0),
+      -- PaperDollItemSlotButton code wants "Bag#Slot" when parsing the element's
+      -- name with `strsub(<name>, 10)`.
+      bagSlotNameFormat = "BgshiBagsBag%dSlot",
+      -- Bag containers are BAG0SLOT - BAG3SLOT for `GetInventorySlotInfo()`.
+      inventorySlotFormat = "BAG%dSLOT",
+      -- Bag slots are Bag0Slot - Bag3Slot in `GetInventorySlotInfo()` but start
+      -- at 1 for `GetContainerNumSlots()`.
+      bagSlotNameNumberOffset = -1,
 
-		-- Append bags 1 through NUM_BAG_SLOTS to `containerIds` array when it is
-		-- built at the end of this file.
-		containerIdRange = { 1, _G.NUM_BAG_SLOTS },
-		-- XML template for bag buttons.
-		bagButtonTemplate = "BagshuiBagsContainerTemplate",
-		-- Bag button inventory IDs are all offset by the same amount, starting
-		-- with the Backpack.
-		bagButtonIdOffset = _G.ContainerIDToInventoryID(0),
-		-- PaperDollItemSlotButton code wants "Bag#Slot" when parsing the element's
-		-- name with `strsub(<name>, 10)`.
-		bagSlotNameFormat = "BgshiBagsBag%dSlot",
-		-- Bag containers are BAG0SLOT - BAG3SLOT for `GetInventorySlotInfo()`.
-		inventorySlotFormat = "BAG%dSLOT",
-		-- Bag slots are Bag0Slot - Bag3Slot in `GetInventorySlotInfo()` but start
-		-- at 1 for `GetContainerNumSlots()`.
-		bagSlotNameNumberOffset = -1,
+      primaryContainer = {
+        -- BACKPACK_CONTAINER isn't available in 1.12 so hardcoding to 0.
+        id = 0,
+        name = _G.BACKPACK_TOOLTIP,
+        texture = "Interface\\Buttons\\Button-Backpack-Up",
+        bindingKey = "TOGGLEBACKPACK",
+      },
 
-		primaryContainer = {
-			-- BACKPACK_CONTAINER isn't available in 1.12 so hardcoding to 0.
-			id = 0,
-			name = _G.BACKPACK_TOOLTIP,
-			texture = "Interface\\Buttons\\Button-Backpack-Up",
-			bindingKey = "TOGGLEBACKPACK",
-		},
+      -- Using this in the item slot button's OnEnter increases compatibility
+      -- with tooltip addons (CompareStats and anything else GFW_ based are notable examples).
+      itemSlotTooltipFunction = "ContainerFrameItemButton_OnEnter",
 
-		-- Using this in the item slot button's OnEnter increases compatibility
-		-- with tooltip addons (CompareStats and anything else GFW_ based are notable examples).
-		itemSlotTooltipFunction = "ContainerFrameItemButton_OnEnter",
+      events = {
+        -- Open/close with Mail frame.
+        MAIL_SHOW = "Open",
+        MAIL_CLOSED = "Close",
+        -- Open/close with Bank frame.
+        BANKFRAME_OPENED = "Open",
+        BANKFRAME_CLOSED = "Close",
+        -- Open/close with Auction frame.
+        AUCTION_HOUSE_SHOW = "Open",
+        AUCTION_HOUSE_CLOSED = "Close",
+        -- Open/close with Trade frame (NOT TradeSkill frame)).
+        TRADE_SHOW = "Open",
+        TRADE_CLOSED = "Close",
+      },
 
-		events = {
-			-- Open/close with Mail frame.
-			MAIL_SHOW = "Open",
-			MAIL_CLOSED = "Close",
-			-- Open/close with Bank frame.
-			BANKFRAME_OPENED = "Open",
-			BANKFRAME_CLOSED = "Close",
-			-- Open/close with Auction frame.
-			AUCTION_HOUSE_SHOW = "Open",
-			AUCTION_HOUSE_CLOSED = "Close",
-			-- Open/close with Trade frame (NOT TradeSkill frame)).
-			TRADE_SHOW = "Open",
-			TRADE_CLOSED = "Close",
-		},
+      apiFunctionsToHook = {
+        OpenAllBags = "ToggleBag",
+        OpenBackpack = "OpenBag",
+        OpenBag = "OpenBag",
+        CloseBackpack = "CloseBag",
+        CloseBag = "CloseBag",
+        ToggleBackpack = "ToggleBag",
+        ToggleBag = "ToggleBag",
+      },
 
-		apiFunctionsToHook = {
-			OpenAllBags = "ToggleBag",
-			OpenBackpack = "OpenBag",
-			OpenBag = "OpenBag",
-			CloseBackpack = "CloseBag",
-			CloseBag = "CloseBag",
-			ToggleBackpack = "ToggleBag",
-			ToggleBag = "ToggleBag",
-		},
+      opensViaHooks = true,
+      keyBindingPrefix = "TOGGLEBAG",
 
-		opensViaHooks = true,
-		keyBindingPrefix = "TOGGLEBAG",
+      hookSettingTranslations = {
+        -- (Open|Close|Toggle)Backpack$ = Bag0.
+        ["Backpack$"] = "hookBag0",
+        -- Letting the Backpack preference control OpenAllBags.
+        -- This isn't currently made obvious in the UI, due to how hook settings are
+        -- autogenerated, so we'll see if anyone complains.
+        ["^OpenAllBags$"] = "hookBag0",
+      },
 
-		hookSettingTranslations = {
-			-- (Open|Close|Toggle)Backpack$ = Bag0.
-			["Backpack$"] = "hookBag0",
-			-- Letting the Backpack preference control OpenAllBags.
-			-- This isn't currently made obvious in the UI, due to how hook settings are
-			-- autogenerated, so we'll see if anyone complains.
-			["^OpenAllBags$"] = "hookBag0",
-		},
+      -- Can use Bank if there isn't enough space to swap a bag.
+      bagSwappingSupplementalStorage = {
+        "Bank",
+      },
 
-		-- Can use Bank if there isn't enough space to swap a bag.
-		bagSwappingSupplementalStorage = {
-			"Bank"
-		},
+      -- Bags get all the special toolbar buttons.
 
-		-- Bags get all the special toolbar buttons.
+      hearthButton = true,
+      clamButton = true,
+      disenchantButton = true,
+      pickLockButton = true,
 
-		hearthButton = true,
-		clamButton = true,
-		disenchantButton = true,
-		pickLockButton = true,
+      openSound = "igBackPackOpen",
+      closeSound = "igBackPackClose",
 
-		openSound = "igBackPackOpen",
-		closeSound = "igBackPackClose",
+      debug = true,
+    },
 
-		debug = true,
-	},
+    [BS_INVENTORY_TYPE.BANK] = {
 
+      -- Bank (24) + (6 Purchasable Bag Slots * 20 slot bags) = 144
+      -- Some Vanilla implementations have larger bags available, but the
+      -- Inventory class will handle that automatically.
+      initialItemSlotButtons = 144,
 
-	[BS_INVENTORY_TYPE.BANK] = {
+      -- Append bags 5 through 10 to containerIds array when it is built at
+      -- the end of this file.
+      containerIdRange = { 5, 10 },
+      -- XML template for bag buttons.
+      bagButtonTemplate = "BankItemButtonBagTemplate",
+      -- Bank bag button IDs match their bag numbers.
+      bagButtonIdOffset = 0,
+      -- BankFrame code wants "Bag#" when parsing the element's name with
+      -- `strsub(<name>, 10)`.
+      bagSlotNameFormat = "BgshiBankBag%d",
+      -- Bank containers are BAG1 - BAG6 for `GetInventorySlotInfo()`.
+      inventorySlotFormat = "BAG%d",
+      -- Bank bag slots are Bag1 - Bag6 in `GetInventorySlotInfo()` but start
+      -- at 5 for `GetContainerNumSlots()`.
+      bagSlotNameNumberOffset = -4,
 
-		-- Bank (24) + (6 Purchasable Bag Slots * 20 slot bags) = 144
-		-- Some Vanilla implementations have larger bags available, but the
-		-- Inventory class will handle that automatically.
-		initialItemSlotButtons = 144,
+      primaryContainer = {
+        id = _G.BANK_CONTAINER,
+        name = L.Bank,
+        texture = "Interface\\ICONS\\inv_box_01",
+      },
 
-		-- Append bags 5 through 10 to containerIds array when it is built at
-		-- the end of this file.
-		containerIdRange = { 5, 10 },
-		-- XML template for bag buttons.
-		bagButtonTemplate = "BankItemButtonBagTemplate",
-		-- Bank bag button IDs match their bag numbers.
-		bagButtonIdOffset = 0,
-		-- BankFrame code wants "Bag#" when parsing the element's name with
-		-- `strsub(<name>, 10)`.
-		bagSlotNameFormat = "BgshiBankBag%d",
-		-- Bank containers are BAG1 - BAG6 for `GetInventorySlotInfo()`.
-		inventorySlotFormat = "BAG%d",
-		-- Bank bag slots are Bag1 - Bag6 in `GetInventorySlotInfo()` but start
-		-- at 5 for `GetContainerNumSlots()`.
-		bagSlotNameNumberOffset = -4,
+      getInventorySlotFunction = _G.BankButtonIDToInvSlotID,
 
-		primaryContainer = {
-			id = _G.BANK_CONTAINER,
-			name = L.Bank,
-			texture = "Interface\\ICONS\\inv_box_01",
-		},
+      -- Bank doesn't need a tooltipFunction because it directly calls
+      -- GameTooltip:SetInventoryItem() in its OnEnter script, so there's
+      -- nothing else addons could be hooking.
 
-		getInventorySlotFunction = _G.BankButtonIDToInvSlotID,
+      events = {
+        BANKFRAME_CLOSED = "Close",
+        BANKFRAME_OPENED = "Open",
+        PLAYERBANKSLOTS_CHANGED = "UpdateBagBar",
+        PLAYERBANKBAGSLOTS_CHANGED = "UpdateBagBar",
+      },
 
-		-- Bank doesn't need a tooltipFunction because it directly calls
-		-- GameTooltip:SetInventoryItem() in its OnEnter script, so there's
-		-- nothing else addons could be hooking.
+      opensViaHooks = false,
 
-		events = {
-			BANKFRAME_CLOSED = "Close",
-			BANKFRAME_OPENED = "Open",
-			PLAYERBANKSLOTS_CHANGED = "UpdateBagBar",
-			PLAYERBANKBAGSLOTS_CHANGED = "UpdateBagBar",
-		},
+      -- Can use Bags if there isn't enough space to swap a bag.
+      bagSwappingSupplementalStorage = {
+        "Bags",
+      },
 
-		opensViaHooks = false,
+      -- Bank can't have the Clam button because `UseContainerItem()` just moves
+      -- items to Bags.
+      clamButton = false,
 
-		-- Can use Bags if there isn't enough space to swap a bag.
-		bagSwappingSupplementalStorage = {
-			"Bags"
-		},
+      --debug = true,
+    },
 
-		-- Bank can't have the Clam button because `UseContainerItem()` just moves
-		-- items to Bags.
-		clamButton = false,
+    [BS_INVENTORY_TYPE.KEYRING] = {
 
-		--debug = true,
-	},
+      dockTo = BS_INVENTORY_TYPE.BAGS,
 
+      -- Just create all 12 possible Keyring buttons.
+      initialItemSlotButtons = 12,
 
-	[BS_INVENTORY_TYPE.KEYRING] = {
+      bagButtonTemplate = "BagshuiBagsContainerTemplate",
 
-		dockTo = BS_INVENTORY_TYPE.BAGS,
+      primaryContainer = {
+        id = _G.KEYRING_CONTAINER,
+        name = _G.KEYRING,
+        texture = "Interface\\ContainerFrame\\KeyRing-Bag-Icon",
+        bindingKey = "TOGGLEKEYRING",
+        numSlotsFunction = _G.GetKeyRingSize,
+      },
 
-		-- Just create all 12 possible Keyring buttons.
-		initialItemSlotButtons = 12,
+      getInventorySlotFunction = _G.KeyRingButtonIDToInvSlotID,
 
-		bagButtonTemplate = "BagshuiBagsContainerTemplate",
+      -- See comment in Bags config for reasoning.
+      itemSlotTooltipFunction = "ContainerFrameItemButton_OnEnter",
 
-		primaryContainer = {
-			id = _G.KEYRING_CONTAINER,
-			name = _G.KEYRING,
-			texture = "Interface\\ContainerFrame\\KeyRing-Bag-Icon",
-			bindingKey = "TOGGLEKEYRING",
-			numSlotsFunction = _G.GetKeyRingSize,
-		},
+      apiFunctionsToHook = {
+        ToggleKeyRing = "ToggleKeyring",
+      },
 
-		getInventorySlotFunction = _G.KeyRingButtonIDToInvSlotID,
+      opensViaHooks = true,
 
-		-- See comment in Bags config for reasoning.
-		itemSlotTooltipFunction = "ContainerFrameItemButton_OnEnter",
+      hookSettingTranslations = {
+        ["KeyRing$"] = "hookBag-2", -- ToggleKeyRing = Bag-2
+      },
 
-		apiFunctionsToHook = {
-			ToggleKeyRing = "ToggleKeyring",
-		},
+      openSound = "KeyRingOpen",
+      closeSound = "KeyRingClose",
 
-		opensViaHooks = true,
+      --debug = true,
+    },
+  }
 
-		hookSettingTranslations = {
-			["KeyRing$"] = "hookBag-2",  -- ToggleKeyRing = Bag-2
-		},
+  -- Automatically construct full container ID lists, which are needed to build
+  -- hook settings (among other things, which is why we need to do it early).
+  for _, config in pairs(Bagshui.config.Inventory) do
+    config.containerIds = {}
+    config.inventorySlots = {}
+    if config.primaryContainer then
+      table.insert(config.containerIds, config.primaryContainer.id)
+    else
+      -- Toss something irrelevant into the first array slot if this inventory
+      -- somehow doesn't have a primary container.
+      table.insert(config.containerIds, -999)
+    end
+    if type(config.containerIdRange) == "table" and table.getn(config.containerIdRange) > 1 then
+      for containerId = config.containerIdRange[1], config.containerIdRange[2] do
+        table.insert(config.containerIds, containerId)
 
-		openSound = "KeyRingOpen",
-		closeSound = "KeyRingClose",
-
-		--debug = true,
-	}
-
-}
-
-
-
--- Automatically construct full container ID lists, which are needed to build
--- hook settings (among other things, which is why we need to do it early).
-for _, config in pairs(Bagshui.config.Inventory) do
-	config.containerIds = {}
-	config.inventorySlots = {}
-	if config.primaryContainer then
-		table.insert(config.containerIds, config.primaryContainer.id)
-	else
-		-- Toss something irrelevant into the first array slot if this inventory
-		-- somehow doesn't have a primary container.
-		table.insert(config.containerIds, -999)
-	end
-	if type(config.containerIdRange) == "table" and table.getn(config.containerIdRange) > 1 then
-		for containerId = config.containerIdRange[1], config.containerIdRange[2] do
-			table.insert(config.containerIds, containerId)
-
-			-- Fill inventory slot IDs.
-			if config.inventorySlotFormat then
-				table.insert(config.inventorySlots, string.format(config.inventorySlotFormat, (containerId + config.bagSlotNameNumberOffset)))
-			end
-		end
-	end
-end
-
-
+        -- Fill inventory slot IDs.
+        if config.inventorySlotFormat then
+          table.insert(
+            config.inventorySlots,
+            string.format(config.inventorySlotFormat, (containerId + config.bagSlotNameNumberOffset))
+          )
+        end
+      end
+    end
+  end
 end)
+

@@ -7,17 +7,15 @@
 --    missing from the active skin will be picked up from the default.
 
 Bagshui:LoadComponent(function()
+  Bagshui.environment.BsSkin = Bagshui.config.Skins.Bagshui
 
-Bagshui.environment.BsSkin = Bagshui.config.Skins.Bagshui
+  -- Active skin is not the default.
+  if Bagshui.config.Skins.activeSkin ~= "Bagshui" and Bagshui.config.Skins[Bagshui.config.Skins.activeSkin] then
+    Bagshui.environment.BsSkin = Bagshui.config.Skins[Bagshui.config.Skins.activeSkin]
+    setmetatable(Bagshui.environment.BsSkin, Bagshui.config.Skins.Bagshui)
+    Bagshui.config.Skins.Bagshui.__index = Bagshui.config.Skins.Bagshui
+  end
 
--- Active skin is not the default.
-if Bagshui.config.Skins.activeSkin ~= "Bagshui" and Bagshui.config.Skins[Bagshui.config.Skins.activeSkin] then
-	Bagshui.environment.BsSkin = Bagshui.config.Skins[Bagshui.config.Skins.activeSkin]
-	setmetatable(Bagshui.environment.BsSkin, Bagshui.config.Skins.Bagshui)
-	Bagshui.config.Skins.Bagshui.__index = Bagshui.config.Skins.Bagshui
-end
-
-Bagshui.components.Skin = Bagshui.environment.BsSkin
-
-
+  Bagshui.components.Skin = Bagshui.environment.BsSkin
 end)
+

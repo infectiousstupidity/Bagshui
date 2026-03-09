@@ -1,7 +1,8 @@
 # !BagshuiDebug
+
 Install this addon to enable [Bagshui](https://github.com/veechs/Bagshui)’s debug output (i.e. `Bagshui:PrintDebug()`).
 
-✳️ You *must* rename `!BagshuiDebug_toc` to `!BagshuiDebug.toc`.
+✳️ You _must_ rename `!BagshuiDebug_toc` to `!BagshuiDebug.toc`.
 
 There are also a few other debug flags scattered around that won’t function otherwise.
 

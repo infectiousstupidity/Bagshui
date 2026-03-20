@@ -392,6 +392,12 @@ Bagshui:AddComponent(function()
       forceCacheUpdate = false,
       forceResort = false,
 
+      -- Dirty flags for pipeline short-circuiting -- allow Update() to skip stages when nothing changed.
+      cacheChanged = false,
+      lookupTablesStale = true,
+      lookupTablesWereRebuilt = false,
+      windowUpdateNeededByCategorize = false,
+
       ---@type string|nil Item search will occur when this is a string instead of nil.
       searchText = nil,
       ---@type boolean Highlight mode - dim items whose stock state has not changed

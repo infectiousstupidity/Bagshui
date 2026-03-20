@@ -68,6 +68,18 @@ Bagshui:AddComponent(function()
       self:CategorizeAndSort()
     end
     self:ManageDryRun(false) -- Second call re-points lookup tables if needed and sets `self.enableResortIcon`.
+    -- If the dry run shows the layout is identical to last render and the window
+    -- update request came only from CategorizeAndSort, skip the full redraw.
+    -- UpdateWindow() still runs its lightweight path (colors, border, strata).
+    if self.dryRun and not self.enableResortIcon and self.windowUpdateNeededByCategorize then
+      self.windowUpdateNeeded = false
+    end
+    self.windowUpdateNeededByCategorize = false
+    -- Always refresh item button visual state when the window is visible and
+    -- the full layout rebuild is being skipped (keeps search and highlights current).
+    if not self.windowUpdateNeeded and self:Visible() then
+      self:UpdateItemSlotColors()
+    end
     self:FindSpecialItems()
     self:UpdateWindow()
     self:UpdateBagBar()

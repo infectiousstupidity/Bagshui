@@ -242,6 +242,12 @@ Bagshui:AddComponent(function()
     --self:PrintDebug("UpdateLayoutLookupTables()")
     -- self:PrintDebug(BsCategories.list)
 
+    -- Only rebuild when the layout structure has actually changed.
+    if not self.lookupTablesStale then
+      return
+    end
+    self.lookupTablesWereRebuilt = true
+
     -- This will be used at the end if defaultCategoryFound is still false.
     local lastGroupId = ""
     local defaultCategoryFound = false
@@ -292,6 +298,8 @@ Bagshui:AddComponent(function()
 
     -- Order sortedCategorySequenceNumbers by category sequence.
     table.sort(self.sortedCategorySequenceNumbers)
+
+    self.lookupTablesStale = false
   end
 
   --- Helper function to add a category to the lookup tables.

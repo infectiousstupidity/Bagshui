@@ -16,6 +16,7 @@ Bagshui:AddComponent(function()
     self:ClearSearch()
     self:UpdateEditModeUiStateBasedOnCursor()
     self.windowUpdateNeeded = true
+    self.lookupTablesStale = true
     self.forceResort = true
     self:Update()
   end

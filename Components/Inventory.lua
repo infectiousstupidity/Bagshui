@@ -782,6 +782,7 @@ Bagshui:AddComponent(function()
 
         self.cacheUpdateNeeded = arg2.inventoryCacheUpdateOnChange or self.cacheUpdateNeeded or false
         self.forceResort = arg2.inventoryResortOnChange or false
+        self.lookupTablesStale = self.lookupTablesStale or (arg2.inventoryResortOnChange and true) or false
         self.windowUpdateNeeded = true
         self:QueueUpdate(0.005)
       end
@@ -807,6 +808,7 @@ Bagshui:AddComponent(function()
         if self.settings["profile" .. profileType] == arg1 then
           self:SetProfile(arg1, profileType)
           if profileType == BS_PROFILE_TYPE.STRUCTURE then
+            self.lookupTablesStale = true
             self.forceResort = true -- Required to avoid issues during UpdateWindow() since all groups may need to be reassessed.
           end
           self.windowUpdateNeeded = true
@@ -818,6 +820,7 @@ Bagshui:AddComponent(function()
 
     -- Re-sort and re-categorize when fundamental objects change.
     if event == "BAGSHUI_CATEGORY_UPDATE" or event == "BAGSHUI_SORTORDER_UPDATE" then
+      self.lookupTablesStale = true
       self.forceResort = true
       self:QueueUpdate()
       return

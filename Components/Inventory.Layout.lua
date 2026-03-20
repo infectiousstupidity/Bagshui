@@ -41,6 +41,9 @@ Bagshui:AddComponent(function()
       update_cascadeInventory.windowUpdateNeeded = update_cascadeInventory.windowUpdateNeeded or self.windowUpdateNeeded
     end
 
+    -- Reset per-update transient flags before running the pipeline.
+    self.cacheChanged = false
+    self.lookupTablesWereRebuilt = false
     -- We're updating!
     self.windowUpdateBlocked = true
 
@@ -61,7 +64,9 @@ Bagshui:AddComponent(function()
     self:ValidateLayout()
     self:ManageDryRun(true) -- First call decides whether we're in dry run mode (`self.dryRun`).
     self:UpdateLayoutLookupTables()
-    self:CategorizeAndSort()
+    if self.cacheChanged or self.lookupTablesWereRebuilt then
+      self:CategorizeAndSort()
+    end
     self:ManageDryRun(false) -- Second call re-points lookup tables if needed and sets `self.enableResortIcon`.
     self:FindSpecialItems()
     self:UpdateWindow()

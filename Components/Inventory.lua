@@ -781,7 +781,7 @@ Bagshui:AddComponent(function()
         end
 
         self.cacheUpdateNeeded = arg2.inventoryCacheUpdateOnChange or self.cacheUpdateNeeded or false
-        self.forceResort = arg2.inventoryResortOnChange or false
+        self.forceResort = self.forceResort or arg2.inventoryResortOnChange or false
         self.lookupTablesStale = self.lookupTablesStale or (arg2.inventoryResortOnChange and true) or false
         self.windowUpdateNeeded = true
         self:QueueUpdate(0.005)
@@ -822,6 +822,7 @@ Bagshui:AddComponent(function()
     if event == "BAGSHUI_CATEGORY_UPDATE" or event == "BAGSHUI_SORTORDER_UPDATE" then
       self.lookupTablesStale = true
       self.forceResort = true
+      self.windowUpdateNeeded = true
       self:QueueUpdate()
       return
     end

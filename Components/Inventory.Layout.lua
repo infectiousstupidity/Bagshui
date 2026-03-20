@@ -60,6 +60,16 @@ Bagshui:AddComponent(function()
       return
     end
 
+    -- Nothing changed and nothing is waiting for a redraw -- skip the entire pipeline.
+    -- This is the primary optimization for spurious BAG_UPDATE events.
+    if not self.cacheChanged and not self.windowUpdateNeeded then
+      self.windowUpdateBlocked = false
+      if update_cascadeInventory then
+        update_cascadeInventory:Update()
+      end
+      return
+    end
+
     -- Perform all updates in the necessary order.
     self:ValidateLayout()
     self:ManageDryRun(true) -- First call decides whether we're in dry run mode (`self.dryRun`).

@@ -219,6 +219,7 @@ Bagshui:AddComponent(function()
     -- Reset flags.
     self.resortNeeded = false
     self.windowUpdateNeeded = true
+    self.windowUpdateNeededByCategorize = true
   end
 
   --- Fill the lookup tables that are used when building the interface.

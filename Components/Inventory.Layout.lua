@@ -72,9 +72,11 @@ Bagshui:AddComponent(function()
 
     -- Perform all updates in the necessary order.
     self:ValidateLayout()
+    -- Capture resort signals before ManageDryRun(true) clears forceResort.
+    local needsCategorizeAndSort = self.forceResort or self.resortNeeded
     self:ManageDryRun(true) -- First call decides whether we're in dry run mode (`self.dryRun`).
     self:UpdateLayoutLookupTables()
-    if self.cacheChanged or self.lookupTablesWereRebuilt then
+    if self.cacheChanged or self.lookupTablesWereRebuilt or needsCategorizeAndSort then
       self:CategorizeAndSort()
     end
     self:ManageDryRun(false) -- Second call re-points lookup tables if needed and sets `self.enableResortIcon`.

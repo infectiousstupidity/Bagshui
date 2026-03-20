@@ -273,7 +273,10 @@ Bagshui:AddComponent(function()
     -- self:PrintDebug(BsCategories.list)
 
     -- Only rebuild when the layout structure has actually changed.
-    if not self.lookupTablesStale then
+    -- Also rebuild if the current tables are unpopulated: ManageDryRun() can switch self.groups
+    -- (and the other layout-state tables) to the proposedLayoutState copies, which start empty
+    -- and won't have been filled yet if this is the first dry-run pass since the last rebuild.
+    if not self.lookupTablesStale and next(self.groups) ~= nil then
       return
     end
     self.lookupTablesWereRebuilt = true

@@ -62,7 +62,7 @@ Bagshui:AddComponent(function()
 
     -- Nothing changed and nothing is waiting for a redraw -- skip the entire pipeline.
     -- This is the primary optimization for spurious BAG_UPDATE events.
-    if not self.cacheChanged and not self.windowUpdateNeeded then
+    if not self.cacheChanged and not self.windowUpdateNeeded and not self.forceResort and not self.lookupTablesStale then
       self.windowUpdateBlocked = false
       if update_cascadeInventory then
         update_cascadeInventory:Update()

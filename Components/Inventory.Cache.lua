@@ -514,6 +514,7 @@ item._proposedStockState ~= BS_ITEM_STOCK_STATE.DOWN
     elseif cosmeticChanges then
       self.windowUpdateNeeded = true
     end
+    self.cacheChanged = (majorChanges or cosmeticChanges or minorChanges)
 
     -- Make sure we don't do a full cache rebuild again.
     self.initialInventoryUpdateNeeded = false

@@ -43,6 +43,9 @@ Bagshui:AddComponent(function()
       -- Normal Edit Mode update.
       self.cacheUpdateNeeded = false
       self.windowUpdateNeeded = true
+      if forceResort then
+        self.lookupTablesStale = true
+      end
       self.forceResort = (forceResort == true)
       self:Update()
       -- Don't cause a stack overflow with recursive events.

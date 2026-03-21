@@ -127,6 +127,29 @@ Bagshui:AddComponent(function()
     end
   end
 
+  --- Refresh cooldown animations on all visible item slot buttons without rebuilding the window layout.
+  --- Called in response to BAG_UPDATE_COOLDOWN so cooldown timers appear immediately after item use.
+  function Inventory:UpdateItemSlotCooldowns()
+    local cooldownStart, cooldownDuration, isOnCooldown
+    for _, button in ipairs(self.ui.buttons.itemSlots) do
+      if button:IsVisible() and button.bagshuiData.item then
+        cooldownStart = 0
+        cooldownDuration = 0
+        isOnCooldown = nil
+        if button.bagshuiData.item.itemString ~= nil then
+          cooldownStart, cooldownDuration, isOnCooldown =
+            _G.GetContainerItemCooldown(button.bagshuiData.bagNum, button.bagshuiData.slotNum)
+        end
+        _G.CooldownFrame_SetTimer(
+          button.bagshuiData.buttonComponents.cooldown,
+          cooldownStart,
+          cooldownDuration,
+          isOnCooldown
+        )
+      end
+    end
+  end
+
   --- Ensure there will be no errors when using the active layout.
   function Inventory:ValidateLayout()
     -- Completely empty layouts need at least a row and a group.

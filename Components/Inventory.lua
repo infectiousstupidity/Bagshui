@@ -827,6 +827,18 @@ Bagshui:AddComponent(function()
       return
     end
 
+    -- BAG_UPDATE_COOLDOWN: refresh cooldown animations on visible item buttons directly without
+    -- triggering a full pipeline update. Before the performance optimizations, the full update
+    -- path ran unconditionally and kept cooldowns current as a side effect. The early-exit added
+    -- for no-op BAG_UPDATE events now suppresses that path when nothing in the cache has changed,
+    -- so we need a dedicated lightweight refresh here.
+    if event == "BAG_UPDATE_COOLDOWN" then
+      if self:Visible() then
+        self:UpdateItemSlotCooldowns()
+      end
+      return
+    end
+
     -- Lock/unlock events need a cache update, but not when a container has
     -- been picked up.
     if event == "ITEM_LOCK_CHANGED" and not Bagshui.pickedUpBagSlotNum and not Bagshui.putDownBagSlotNum then

@@ -80,10 +80,15 @@ Bagshui:AddComponent(function()
       self:CategorizeAndSort()
     end
     self:ManageDryRun(false) -- Second call re-points lookup tables if needed and sets `self.enableResortIcon`.
-    -- If the dry run shows the layout is identical to last render and the window
-    -- update request came only from CategorizeAndSort, skip the full redraw.
+    -- If the dry run shows the layout is identical to last render, the window
+    -- update request came only from CategorizeAndSort, and no cache items actually
+    -- changed, skip the full redraw. The cache-changed guard is essential: both
+    -- proposedLayoutState and currentLayoutState hold the same live pointers into
+    -- self.inventory, so ObjectsEqual() always reports them as identical after
+    -- UpdateCache() writes new data in place -- even when item A replaced item B
+    -- in the same slot. Without the guard the texture would not update.
     -- UpdateWindow() still runs its lightweight path (colors, border, strata).
-    if self.dryRun and not self.enableResortIcon and self.windowUpdateNeededByCategorize then
+    if self.dryRun and not self.enableResortIcon and self.windowUpdateNeededByCategorize and not self.cacheChanged then
       self.windowUpdateNeeded = false
     end
     self.windowUpdateNeededByCategorize = false

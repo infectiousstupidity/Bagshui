@@ -566,6 +566,22 @@ Bagshui:LoadComponent(function()
       buttonComponents.topLeftBadge:Hide()
       buttonInfo.topLeftBadgeAlpha = 0
 
+      -- Marked-for-sale badge. This is independent of the normal top-left badge
+      -- so quest/usable indicators don't get overwritten.
+      buttonComponents.saleBadge =
+        self:CreateShadowedTexture(button, "Interface\\Icons\\INV_Misc_Coin_01")
+      buttonComponents.saleBadge:SetFrameLevel(badgeFrameLevel)
+      buttonComponents.saleBadge:SetWidth(12)
+      buttonComponents.saleBadge:SetHeight(12)
+      buttonComponents.saleBadge:SetPoint(
+        "TOP",
+        button,
+        "TOP",
+        0,
+        -BsSkin.itemSlotDecorationAnchor
+      )
+      buttonComponents.saleBadge:Hide()
+
       -- Stock change badge.
       buttonComponents.stockBadge = self:CreateShadowedTexture(button, nil)
       buttonComponents.stockBadge:SetFrameLevel(badgeFrameLevel)
@@ -635,20 +651,6 @@ Bagshui:LoadComponent(function()
     buttonInfo.stockBadgeAlpha = 0
     buttonInfo.topLeftBadgeAlpha = 0
 
-    -- Marked-for-sale badge has top priority so the player can always see items
-    -- queued for automatic sale at the next merchant.
-    if
-      inventory
-      and inventory.inventoryType == BS_INVENTORY_TYPE.BAGS
-      and Bagshui.components.Bags
-      and Bagshui.components.Bags:IsItemMarkedForSale(item)
-    then
-      self:SetShadowedTexture(buttonComponents.topLeftBadge, "Interface\\Icons\\INV_Misc_Coin_01")
-      self:SetShadowedTextureTexCoord(buttonComponents.topLeftBadge, 0, 1, 0, 1)
-      self:SetShadowedTextureVertexColor(buttonComponents.topLeftBadge, 1, 1, 1)
-      buttonInfo.topLeftBadgeAlpha = 1
-    end
-
     -- Quality color badges can be enabled globally via Colorblind Mode.
     local qualityBadgeTexCoords = BS_INVENTORY_QUALITY_BADGE_COORD[item.quality]
     if
@@ -678,11 +680,7 @@ Bagshui:LoadComponent(function()
     end
 
     -- Active quest badge (uses the top left badge slot).
-    if
-      buttonInfo.topLeftBadgeAlpha == 0
-      and settings.itemActiveQuestBadges
-      and Bagshui.activeQuestItems[item.name]
-    then
+    if settings.itemActiveQuestBadges and Bagshui.activeQuestItems[item.name] then
       self:SetShadowedTexture(buttonComponents.topLeftBadge, "ItemSlot\\Quest")
       self:SetShadowedTextureTexCoord(buttonComponents.topLeftBadge, 0, 1, 0, 1)
       buttonInfo.topLeftBadgeAlpha = 1
@@ -903,6 +901,9 @@ Bagshui:LoadComponent(function()
       buttonComponents.stockBadge:Hide()
       buttonComponents.qualityBadge:Hide()
       buttonComponents.topLeftBadge:Hide()
+      if buttonComponents.saleBadge then
+        buttonComponents.saleBadge:Hide()
+      end
     else
       -- Normal processing (non-Inventory item slot buttons or Inventory and not Edit Mode).
 
@@ -939,6 +940,22 @@ Bagshui:LoadComponent(function()
             iconTextureAlpha = BsSkin.itemSlotTextureDimmedOpacity
             opacityOverride = BsSkin.itemSlotTextureDimmedOpacity
           end
+        end
+      end
+
+      -- Marked-for-sale badge is resolved live instead of cached in buttonInfo.
+      -- This makes the indicator appear/disappear immediately after the menu action.
+      if buttonComponents.saleBadge then
+        if
+          inventory
+          and item
+          and inventory.inventoryType == BS_INVENTORY_TYPE.BAGS
+          and Bagshui.components.Bags:IsItemMarkedForSale(item)
+        then
+          buttonComponents.saleBadge:Show()
+          self:SetShadowedTextureAlpha(buttonComponents.saleBadge, opacityOverride or 1)
+        else
+          buttonComponents.saleBadge:Hide()
         end
       end
 

@@ -162,63 +162,68 @@ Bagshui:AddComponent(function()
   end
 
   -- Marked-for-sale items are a one-shot, per-character vendor queue.
-  -- itemString contains WoW's unique item ID when one is available, allowing
-  -- individual gear pieces to stay marked even if they move to another bag slot.
+  -- Use the exact live bag slot plus the full WotLK item hyperlink. Bagshui's
+  -- historical itemString parser intentionally reduces links to the old four-field
+  -- format, so it must not be used to identify a specific WotLK item here.
   local MARKED_FOR_SALE_DATA_KEY = "markedForSale"
 
-  local function getUniqueItemId(itemString)
-    local uniqueId = string.match(tostring(itemString or ""), "^item:%d+:%d+:%d+:(%d+)$")
-    return tonumber(uniqueId) or 0
+  local function getMarkedForSaleSlotKey(bagNum, slotNum)
+    return tostring(bagNum) .. ":" .. tostring(slotNum)
   end
 
-  local function getLiveItemString(bagNum, slotNum)
+  local function getLiveItemLink(bagNum, slotNum)
     if type(bagNum) ~= "number" or type(slotNum) ~= "number" then
       return nil
     end
-    local itemLink = _G.GetContainerItemLink(bagNum, slotNum)
-    if not itemLink then
-      return nil
-    end
-    return BsItemInfo:ParseItemLink(itemLink)
+    return _G.GetContainerItemLink(bagNum, slotNum)
   end
 
-  --- Return the current character's persistent marked-for-sale list.
+  --- Return the current character's persistent marked-for-sale map.
+  --- Keys are "<bagNum>:<slotNum>" and values contain the exact full item link.
   ---@return table markedForSale
   function Bags:GetMarkedForSaleList()
-    if type(Bagshui.currentCharacterData[MARKED_FOR_SALE_DATA_KEY]) ~= "table" then
-      Bagshui.currentCharacterData[MARKED_FOR_SALE_DATA_KEY] = {}
+    local markedForSale = Bagshui.currentCharacterData[MARKED_FOR_SALE_DATA_KEY]
+
+    if type(markedForSale) ~= "table" then
+      markedForSale = {}
+      Bagshui.currentCharacterData[MARKED_FOR_SALE_DATA_KEY] = markedForSale
+    elseif markedForSale[1] ~= nil then
+      -- Migrate away from the broken first implementation, which stored an
+      -- array based on Bagshui's shortened four-field item strings.
+      markedForSale = {}
+      Bagshui.currentCharacterData[MARKED_FOR_SALE_DATA_KEY] = markedForSale
     end
-    return Bagshui.currentCharacterData[MARKED_FOR_SALE_DATA_KEY]
+
+    return markedForSale
   end
 
-  --- Find the queue entry corresponding to a Bagshui item.
-  --- Items with a real unique ID follow moves; non-unique stackable items only
-  --- match the exact bag/slot originally marked so another copy is never sold.
+  --- Find the mark corresponding to the item's exact current bag slot.
+  --- The live full item link must still match so a different item that later
+  --- occupies the same slot can never inherit the old sale mark.
   ---@param item table Bagshui item.
-  ---@return number? index
+  ---@return string? key
   ---@return table? entry
   function Bags:FindMarkedForSaleEntry(item)
-    if type(item) ~= "table" or not item.itemString or item.itemString == "" then
+    if
+      type(item) ~= "table"
+      or type(item.bagNum) ~= "number"
+      or type(item.slotNum) ~= "number"
+      or item.emptySlot == 1
+    then
       return nil
     end
 
-    local itemUniqueId = getUniqueItemId(item.itemString)
-    local markedForSale = self:GetMarkedForSaleList()
-    for index, entry in ipairs(markedForSale) do
-      if entry.itemString == item.itemString then
-        local entryUniqueId = tonumber(entry.uniqueId) or getUniqueItemId(entry.itemString)
-        if
-          (entryUniqueId ~= 0 and itemUniqueId == entryUniqueId)
-          or (
-            entryUniqueId == 0
-            and entry.bagNum == item.bagNum
-            and entry.slotNum == item.slotNum
-          )
-        then
-          return index, entry
-        end
-      end
+    local key = getMarkedForSaleSlotKey(item.bagNum, item.slotNum)
+    local entry = self:GetMarkedForSaleList()[key]
+    if not entry then
+      return nil
     end
+
+    local liveItemLink = getLiveItemLink(item.bagNum, item.slotNum)
+    if liveItemLink and liveItemLink == entry.itemLink then
+      return key, entry
+    end
+
     return nil
   end
 
@@ -229,43 +234,6 @@ Bagshui:AddComponent(function()
     return self:FindMarkedForSaleEntry(item) ~= nil
   end
 
-  --- Resolve a saved mark to the item's current live bag/slot.
-  --- Unique items are allowed to move; non-unique items must remain in their
-  --- original slot to avoid accidentally matching a different stack/copy.
-  ---@param entry table Marked-for-sale entry.
-  ---@return number? bagNum
-  ---@return number? slotNum
-  ---@return string? itemString
-  function Bags:ResolveMarkedForSaleEntry(entry)
-    if type(entry) ~= "table" or type(entry.itemString) ~= "string" then
-      return nil
-    end
-
-    local itemString = getLiveItemString(entry.bagNum, entry.slotNum)
-    if itemString == entry.itemString then
-      return entry.bagNum, entry.slotNum, itemString
-    end
-
-    local uniqueId = tonumber(entry.uniqueId) or getUniqueItemId(entry.itemString)
-    if uniqueId == 0 then
-      return nil
-    end
-
-    for _, bagNum in ipairs(self.containerIds) do
-      local numSlots = _G.GetContainerNumSlots(bagNum) or 0
-      for slotNum = 1, numSlots do
-        itemString = getLiveItemString(bagNum, slotNum)
-        if itemString == entry.itemString then
-          entry.bagNum = bagNum
-          entry.slotNum = slotNum
-          return bagNum, slotNum, itemString
-        end
-      end
-    end
-
-    return nil
-  end
-
   --- Add/remove an item from the one-shot vendor queue.
   ---@param item table Bagshui item.
   ---@return boolean? marked True when marked, false when unmarked.
@@ -273,89 +241,96 @@ Bagshui:AddComponent(function()
     if
       type(item) ~= "table"
       or item.emptySlot == 1
-      or not item.itemString
-      or item.itemString == ""
+      or type(item.bagNum) ~= "number"
+      or type(item.slotNum) ~= "number"
       or not self.online
     then
       return nil
     end
 
+    local liveItemLink = getLiveItemLink(item.bagNum, item.slotNum)
+    if not liveItemLink then
+      return nil
+    end
+
     local markedForSale = self:GetMarkedForSaleList()
-    local index = self:FindMarkedForSaleEntry(item)
+    local key = getMarkedForSaleSlotKey(item.bagNum, item.slotNum)
+    local existingEntry = markedForSale[key]
     local marked
 
-    if index then
-      table.remove(markedForSale, index)
+    if existingEntry and existingEntry.itemLink == liveItemLink then
+      markedForSale[key] = nil
       marked = false
     else
-      table.insert(markedForSale, {
-        itemString = item.itemString,
-        uniqueId = getUniqueItemId(item.itemString),
+      markedForSale[key] = {
         bagNum = item.bagNum,
         slotNum = item.slotNum,
+        itemLink = liveItemLink,
         name = item.name,
-      })
+      }
       marked = true
     end
 
-    self.windowUpdateNeeded = true
+    -- The sale badge is resolved dynamically in UpdateItemButtonColorsAndBadges,
+    -- so a lightweight color/badge refresh is enough and updates immediately.
     if self:Visible() then
-      self:ForceUpdateWindow()
+      self:UpdateItemSlotColors()
     end
 
     return marked
   end
 
-  --- Remove marks whose items are no longer present after a vendor pass.
-  --- A failed sale remains marked because the live item still resolves.
+  --- Remove stale marks after a vendor pass.
+  --- Successful sales disappear from their bag slots; failed/unsellable items
+  --- remain present and therefore remain marked.
   function Bags:CleanupMarkedForSaleAfterVendor()
     local markedForSale = self:GetMarkedForSaleList()
     local changed = false
 
-    for index = table.getn(markedForSale), 1, -1 do
-      if not self:ResolveMarkedForSaleEntry(markedForSale[index]) then
-        table.remove(markedForSale, index)
+    for key, entry in pairs(markedForSale) do
+      local liveItemLink = getLiveItemLink(entry.bagNum, entry.slotNum)
+      if not liveItemLink or liveItemLink ~= entry.itemLink then
+        markedForSale[key] = nil
         changed = true
       end
     end
 
     if changed and self:Visible() then
-      self.windowUpdateNeeded = true
-      self:ForceUpdateWindow()
+      self:UpdateItemSlotColors()
     end
   end
 
-  --- Sell all currently resolvable items that were explicitly marked by the player.
-  --- Unsellable or locked items stay marked; successful sales are removed only
-  --- after the item disappears from the live bag slot.
+  --- Sell all items explicitly marked by the player.
+  --- Only the exact item still occupying the exact marked slot is eligible.
+  --- Unsellable/locked items are skipped and stay marked.
   function Bags:SellMarkedItems()
     if not self.online then
       return
     end
 
     local markedForSale = self:GetMarkedForSaleList()
-    if table.getn(markedForSale) == 0 then
+    if next(markedForSale) == nil then
       return
     end
 
     local attemptedSale = false
-    for _, entry in ipairs(markedForSale) do
-      local bagNum, slotNum, itemString = self:ResolveMarkedForSaleEntry(entry)
-      if bagNum and slotNum and itemString then
-        local _, _, locked = _G.GetContainerItemInfo(bagNum, slotNum)
-        local _, _, _, _, _, _, _, _, _, _, sellPrice = _G.GetItemInfo(itemString)
+    for _, entry in pairs(markedForSale) do
+      local liveItemLink = getLiveItemLink(entry.bagNum, entry.slotNum)
+      if liveItemLink and liveItemLink == entry.itemLink then
+        local _, _, locked = _G.GetContainerItemInfo(entry.bagNum, entry.slotNum)
+        local _, _, _, _, _, _, _, _, _, _, sellPrice = _G.GetItemInfo(liveItemLink)
 
         if not locked and type(sellPrice) == "number" and sellPrice > 0 then
-          _G.UseContainerItem(bagNum, slotNum)
+          _G.UseContainerItem(entry.bagNum, entry.slotNum)
           attemptedSale = true
         end
       end
     end
 
-    -- Container updates arrive asynchronously. Verify after a short delay so
-    -- marks are only removed once the corresponding item is actually gone.
+    -- Bag updates are asynchronous. Wait until the server has processed the sale
+    -- before deciding which marks should be cleared.
     if attemptedSale then
-      Bagshui:QueueClassCallback(self, self.CleanupMarkedForSaleAfterVendor, 0.2)
+      Bagshui:QueueClassCallback(self, self.CleanupMarkedForSaleAfterVendor, 0.5)
     else
       self:CleanupMarkedForSaleAfterVendor()
     end

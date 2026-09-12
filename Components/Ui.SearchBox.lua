@@ -12,8 +12,19 @@ Bagshui:AddComponent(function()
   ---@param onEnterPressed function? OnEnterPressed script.
   ---@param onIconClick function? OnClick for search icon.
   ---@param placeholderText string? Text to display when the search box is empty.
+  ---@param onTextChangedDebounceSeconds number? Delay `onTextChanged` by this many seconds and coalesce rapid changes. Clearing remains immediate.
   ---@return table searchBox
-  function Ui:CreateSearchBox(name, parent, width, height, onTextChanged, onEnterPressed, onIconClick, placeholderText)
+  function Ui:CreateSearchBox(
+    name,
+    parent,
+    width,
+    height,
+    onTextChanged,
+    onEnterPressed,
+    onIconClick,
+    placeholderText,
+    onTextChangedDebounceSeconds
+  )
     width = width or 85
     height = height or 18
 
@@ -29,68 +40,99 @@ Bagshui:AddComponent(function()
 
     -- Focus gained.
     local oldOnEditFocusGained = searchBox:GetScript("OnEditFocusGained")
-    searchBox:SetScript("OnEditFocusGained", function()
-      oldOnEditFocusGained()
+    searchBox:SetScript("OnEditFocusGained", function(editBox, ...)
+      oldOnEditFocusGained(editBox, ...)
       Bagshui:CloseMenus()
-      self:UpdateSearchBoxState(_G.this)
-      _G.this:HighlightText()
+      self:UpdateSearchBoxState(editBox)
+      editBox:HighlightText()
     end)
 
     -- Focus lost.
     local oldOnEditFocusLost = searchBox:GetScript("OnEditFocusLost")
-    searchBox:SetScript("OnEditFocusLost", function()
-      oldOnEditFocusLost()
-      _G.this.bagshuiData.hasFocus = false
-      self:UpdateSearchBoxState(_G.this)
-      _G.this:HighlightText(0, 0)
+    searchBox:SetScript("OnEditFocusLost", function(editBox, ...)
+      oldOnEditFocusLost(editBox, ...)
+      editBox.bagshuiData.hasFocus = false
+      self:UpdateSearchBoxState(editBox)
+      editBox:HighlightText(0, 0)
     end)
 
-    -- Text changed.
-    searchBox:SetScript("OnTextChanged", function(this)
-      this = this or _G.this
-      local searchText = this:GetText()
-      _G.this.bagshuiData.searchText = (type(searchText) == "string" and string.len(searchText) > 0) and searchText
-        or nil
-      self:UpdateSearchBoxState(this)
-      if onTextChanged then
-        onTextChanged()
+    -- Text changed. The delayed callback is unique to this edit box, allowing
+    -- Bagshui's event queue to coalesce typing without one search box replacing
+    -- another's pending callback.
+    if onTextChanged and onTextChangedDebounceSeconds then
+      searchBox.bagshuiData.runOnTextChanged = function(editBox, ...)
+        if not editBox.bagshuiData.onTextChangedPending or not editBox:IsShown() then
+          return
+        end
+        editBox.bagshuiData.onTextChangedPending = false
+        onTextChanged(editBox, ...)
       end
+    end
+
+    searchBox:SetScript("OnTextChanged", function(editBox, ...)
+      local searchText = editBox:GetText()
+      editBox.bagshuiData.searchText = (type(searchText) == "string" and string.len(searchText) > 0) and searchText
+        or nil
+      self:UpdateSearchBoxState(editBox)
+      if onTextChanged then
+        if onTextChangedDebounceSeconds and editBox.bagshuiData.searchText then
+          editBox.bagshuiData.onTextChangedPending = true
+          Bagshui:QueueEvent(
+            editBox.bagshuiData.runOnTextChanged,
+            onTextChangedDebounceSeconds,
+            false,
+            editBox,
+            ...
+          )
+        else
+          -- Clearing a search should restore the full list immediately and
+          -- invalidate any callback that is still waiting in the event queue.
+          editBox.bagshuiData.onTextChangedPending = false
+          onTextChanged(editBox, ...)
+        end
+      end
+    end)
+
+    -- Hiding a window doesn't remove an event from Bagshui's queue. Mark its
+    -- callback stale so reopening or reusing the window can't apply old text.
+    searchBox:SetScript("OnHide", function(editBox)
+      editBox.bagshuiData.onTextChangedPending = false
     end)
 
     -- Focus and history management based on keyboard input.
 
-    searchBox:SetScript("OnEnterPressed", function()
-      _G.this:AddHistoryLine(_G.this:GetText())
+    searchBox:SetScript("OnEnterPressed", function(editBox, ...)
+      editBox:AddHistoryLine(editBox:GetText())
       if onEnterPressed then
-        onEnterPressed()
+        onEnterPressed(editBox, ...)
       end
-      _G.this:ClearFocus()
+      editBox:ClearFocus()
     end)
 
-    searchBox:SetScript("OnEscapePressed", function()
-      if string.len(_G.this:GetText() or "") > 0 then
-        _G.this:AddHistoryLine(_G.this:GetText())
-        _G.this:SetText("")
+    searchBox:SetScript("OnEscapePressed", function(editBox)
+      if string.len(editBox:GetText() or "") > 0 then
+        editBox:AddHistoryLine(editBox:GetText())
+        editBox:SetText("")
       else
-        _G.this:ClearFocus()
+        editBox:ClearFocus()
       end
     end)
 
-    searchBox:SetScript("OnTabPressed", function()
-      _G.this:AddHistoryLine(_G.this:GetText())
-      _G.this:ClearFocus()
+    searchBox:SetScript("OnTabPressed", function(editBox)
+      editBox:AddHistoryLine(editBox:GetText())
+      editBox:ClearFocus()
     end)
 
     -- Mouse events.
 
-    searchBox:SetScript("OnEnter", function()
-      _G.this.bagshuiData.mouseIsOver = true
-      self:UpdateSearchBoxState(_G.this)
+    searchBox:SetScript("OnEnter", function(editBox)
+      editBox.bagshuiData.mouseIsOver = true
+      self:UpdateSearchBoxState(editBox)
     end)
 
-    searchBox:SetScript("OnLeave", function()
-      _G.this.bagshuiData.mouseIsOver = false
-      self:UpdateSearchBoxState(_G.this)
+    searchBox:SetScript("OnLeave", function(editBox)
+      editBox.bagshuiData.mouseIsOver = false
+      self:UpdateSearchBoxState(editBox)
     end)
 
     -- Add search icon.

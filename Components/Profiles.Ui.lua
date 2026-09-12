@@ -168,13 +168,13 @@ Bagshui:AddComponent(function()
                 scrollableList_DisableIfReadOnly = true,
                 scrollableList_DisableIfMultipleSelected = true,
                 xOffset = BsSkin.toolbarSpacing,
-                onClick = function()
+                onClick = function(button)
                   self.menus:OpenMenu(
                     "ReplaceProfileData",
                     self.objectManager.ui.listFrame.bagshuiData.selectedEntry, -- OpenMenu callback arg1
                     nil, -- OpenMenu callback arg2
                     -- Anchoring.
-                    _G.this,
+                    button,
                     0,
                     0,
                     "TOPLEFT",

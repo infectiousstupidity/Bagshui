@@ -11,7 +11,7 @@ Bagshui:AddComponent(function()
   --- group script functions so that it's available to call from Inventory:ItemSlotAndGroupMouseOverCheck().
   ---@param group table Group UI frame.
   function Inventory:Group_OnEnter(group)
-    local this = group or _G.this
+    local this = group
     local ui = this.bagshuiData.ui
     local inventory = ui.inventory
 
@@ -84,12 +84,11 @@ Bagshui:AddComponent(function()
   end
 
   --- Reset colors, hide tooltips.
-  local function Group_OnLeave()
-    local this = _G.this
+  local function Group_OnLeave(this)
     local ui = this.bagshuiData.ui
 
     this.bagshuiData.mouseIsOver = false
-    Bagshui:HideTooltips()
+    Bagshui:HideTooltips(this)
     if not this:IsMouseEnabled() then
       return
     end
@@ -97,8 +96,7 @@ Bagshui:AddComponent(function()
   end
 
   --- Edit Mode interactions for groups.
-  local function Group_OnClick()
-    local this = _G.this
+  local function Group_OnClick(this, mouseButton)
     local ui = this.bagshuiData.ui
     local inventory = ui.inventory
 
@@ -108,12 +106,12 @@ Bagshui:AddComponent(function()
     end
 
     -- Left/Right click.
-    if _G.arg1 == "LeftButton" or inventory:EditModeCursorHasItem() then
+    if mouseButton == "LeftButton" or inventory:EditModeCursorHasItem() then
       -- When a menu is open, just close it and don't do anything else.
       -- Without this, you can accidentally pick up a group when trying to close a menu.
       if inventory.menus:IsMenuOpen() then
         Bagshui:CloseMenus()
-        this:GetScript("OnEnter")()
+        this:GetScript("OnEnter")(this)
         -- Tooltips and highlighting may need to reappear.
         inventory:ItemSlotAndGroupMouseOverCheck()
         return
@@ -141,31 +139,31 @@ Bagshui:AddComponent(function()
       else
         -- Nothing on the cursor - pick up the group.
         -- _G.PlaySound is handled by PickUpGroup().
-        this:GetScript("OnLeave")()
+        this:GetScript("OnLeave")(this)
         inventory:EditModePickUpGroup(this.bagshuiData.groupId)
         ui:SetGroupColors(this, false)
       end
-    elseif _G.arg1 == "RightButton" then
+    elseif mouseButton == "RightButton" then
       inventory.menus:OpenMenu("Group", this, nil, "cursor")
     end
   end
 
   --- Highlight group when the mouse button is pressed to indicate that it will be dragged.
-  local function Group_OnMouseDown()
-    if not _G.this:IsEnabled() then
+  local function Group_OnMouseDown(this)
+    if not this:IsEnabled() then
       return
     end
-    _G.this.bagshuiData.ui:SetGroupColors(_G.this, true)
+    this.bagshuiData.ui:SetGroupColors(this, true)
   end
 
   --- Remove group highlight.
-  local function Group_OnMouseUp()
-    _G.this.bagshuiData.ui:SetGroupColors(_G.this, false)
+  local function Group_OnMouseUp(this)
+    this.bagshuiData.ui:SetGroupColors(this, false)
   end
 
   --- Pick up the group.
-  local function Group_OnDragStart()
-    _G.this:Click()
+  local function Group_OnDragStart(this)
+    this:Click()
   end
 
   ---Create a new group frame that holds item slot buttons.
@@ -356,8 +354,7 @@ Bagshui:AddComponent(function()
   --#region Groups Move Targets
 
   --- Trigger color changes and tooltips.
-  local function GroupMoveTarget_OnEnter()
-    local this = _G.this
+  local function GroupMoveTarget_OnEnter(this)
     local ui = this.bagshuiData.ui
     local inventory = ui.inventory
 
@@ -382,18 +379,16 @@ Bagshui:AddComponent(function()
   end
 
   --- Hide tooltips and reset colors.
-  local function GroupMoveTarget_OnLeave()
-    local this = _G.this
+  local function GroupMoveTarget_OnLeave(this)
     local ui = this.bagshuiData.ui
 
     this.bagshuiData.mouseIsOver = false
     ui:SetGroupColors(this, false)
-    Bagshui:HideTooltips()
+    Bagshui:HideTooltips(this)
   end
 
   --- Create a new group and move the object on the cursor into it if applicable.
-  local function GroupMoveTarget_OnClick()
-    local this = _G.this
+  local function GroupMoveTarget_OnClick(this)
     local inventory = this.bagshuiData.ui.inventory
 
     this.bagshuiData.ui.inventory:AssignGroupToLayout(
@@ -406,13 +401,13 @@ Bagshui:AddComponent(function()
   end
 
   --- Highlight.
-  local function GroupMoveTarget_OnMouseDown()
-    _G.this.bagshuiData.ui:SetGroupColors(_G.this, true)
+  local function GroupMoveTarget_OnMouseDown(this)
+    this.bagshuiData.ui:SetGroupColors(this, true)
   end
 
   --- Un-highlight.
-  local function GroupMoveTarget_OnMouseUp()
-    _G.this.bagshuiData.ui:SetGroupColors(_G.this, false)
+  local function GroupMoveTarget_OnMouseUp(this)
+    this.bagshuiData.ui:SetGroupColors(this, false)
   end
 
   ---Create a new UI group move target button.

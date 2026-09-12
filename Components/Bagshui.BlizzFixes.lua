@@ -15,7 +15,11 @@ Bagshui:LoadComponent(function()
   --- ```
   ---@param wowApiFunctionName string Hooked WoW API function that triggered this call.
   ---@param moneyFrame table? `MoneyFrame_UpdateMoney()` parameter on newer clients.
-  function Bagshui:MoneyFrame_UpdateMoney(wowApiFunctionName, moneyFrame)
+  ---@param ... any Additional original arguments.
+  function Bagshui:MoneyFrame_UpdateMoney(wowApiFunctionName, moneyFrame, ...)
+    -- Vanilla supplies the target only through the legacy global and expects
+    -- the original function to be called without a new frame argument.
+    local hasExplicitFrame = moneyFrame ~= nil
     moneyFrame = moneyFrame or _G.this
 
     local inventory = moneyFrame and moneyFrame.bagshuiData and moneyFrame.bagshuiData.inventory
@@ -31,7 +35,11 @@ Bagshui:LoadComponent(function()
       moneyFrame.staticMoney = 0
     end
 
-    self.hooks:OriginalHook(wowApiFunctionName, moneyFrame)
+    if hasExplicitFrame then
+      self.hooks:OriginalHook(wowApiFunctionName, moneyFrame, ...)
+    else
+      self.hooks:OriginalHook(wowApiFunctionName)
+    end
   end
 
   --- Ensure the stack split frame stays onscreen.
@@ -40,9 +48,10 @@ Bagshui:LoadComponent(function()
   ---@param parent any `OpenStackSplitFrame()` parameter.
   ---@param anchor any `OpenStackSplitFrame()` parameter.
   ---@param anchorTo any `OpenStackSplitFrame()` parameter.
-  function Bagshui:OpenStackSplitFrame(wowApiFunctionName, maxStack, parent, anchor, anchorTo)
+  ---@param ... any Additional original arguments.
+  function Bagshui:OpenStackSplitFrame(wowApiFunctionName, maxStack, parent, anchor, anchorTo, ...)
     -- Pass along to the normal `OpenStackSplitFrame()` to handle everything.
-    self.hooks:OriginalHook(wowApiFunctionName, maxStack, parent, anchor, anchorTo)
+    self.hooks:OriginalHook(wowApiFunctionName, maxStack, parent, anchor, anchorTo, ...)
     -- Reposition if needed.
     if BsUtil.GetFrameOffscreenAmount(_G.StackSplitFrame, "y") < 0 then
       self:PrintDebug(anchor)

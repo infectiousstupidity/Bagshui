@@ -907,8 +907,8 @@ not validate
       -- Remove clickability and pass drag events to the window.
       self.itemSlotButton:RegisterForClicks(nil)
       self.itemSlotButton:RegisterForDrag("LeftButton")
-      self.itemSlotButton:SetScript("OnDragStart", function()
-        if _G.GameTooltip:IsOwned(_G.this) then
+      self.itemSlotButton:SetScript("OnDragStart", function(itemButton)
+        if _G.GameTooltip:IsOwned(itemButton) then
           _G.GameTooltip:Hide()
         end
         self.uiFrame:StartMoving()

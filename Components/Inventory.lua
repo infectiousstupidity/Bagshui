@@ -344,6 +344,20 @@ Bagshui:AddComponent(function()
       preUpdateItemCounts = {},
       postUpdateItemCounts = {},
       lastUpdateLockedContainers = {},
+      ---@type table<number, boolean> Containers reported by BAG_UPDATE and awaiting a cache scan.
+      dirtyContainers = {},
+      ---@type table<table, boolean> Cache entries whose rule- or sort-relevant data changed.
+      cacheChangedItems = {},
+      ---@type table<table, boolean> Cache entries with lock/readable-only visual changes.
+      cacheVisualChangedItems = {},
+      ---@type table<table, string|nil> Group occupied by a changed cache entry before it was refreshed.
+      cacheChangedItemPreviousGroups = {},
+      ---@type table<table, boolean> Whether a changed cache entry was empty before refresh.
+      cacheChangedItemPreviousEmpty = {},
+      cacheCountChanged = false,
+      cacheIdentityChanged = false,
+      cacheBagStructureChanged = false,
+      cacheRuleContextChanged = false,
 
       -- Category/group-related lookup tables -- See `UpdateLayoutLookupTables()` for descriptions of most of these.
       -- This is stored in the `currentLayoutState` table because there is a parallel `proposedLayoutState`
@@ -701,9 +715,13 @@ Bagshui:AddComponent(function()
       return
     end
 
-    -- BAG_UPDATE: Don't do anything if arg1 is for a bag not handled by this class.
-    if event == "BAG_UPDATE" and not self.myContainerIds[arg1] then
-      return
+    -- BAG_UPDATE: remember the specific container so the debounced cache pass can
+    -- scan the union of changed bags instead of the entire inventory.
+    if event == "BAG_UPDATE" then
+      if not self.myContainerIds[arg1] then
+        return
+      end
+      self.dirtyContainers[arg1] = true
     end
 
     -- MERCHANT_CLOSED: Clear pending sale item.
@@ -722,13 +740,23 @@ Bagshui:AddComponent(function()
       return
     end
 
-    -- Active quest / character changes / equipped gear / profession items.
-    -- Putting this early since it will be very common.
+    -- Zone/subzone changes alter rule context, not container contents. Only run
+    -- categorization when an active category actually uses a location rule.
+    if event == "BAGSHUI_GAME_UPDATE" then
+      if self:ActiveCategoriesUseRuleFunctions({ "Zone", "z", "Subzone", "sz" }) then
+        self.cacheRuleContextChanged = true
+        self.resortNeeded = true
+        self:QueueUpdate()
+      end
+      return
+    end
+
+    -- Active quest / character changes / equipped gear / profession items can
+    -- change cached item metadata, so retain the safe full-cache fallback.
     if
       event == "BAGSHUI_ACTIVE_QUEST_ITEM_UPDATE"
       or event == "BAGSHUI_CHARACTER_UPDATE"
       or event == "BAGSHUI_EQUIPPED_HISTORY_UPDATE"
-      or event == "BAGSHUI_GAME_UPDATE"
       or event == "BAGSHUI_PROFESSION_ITEM_UPDATE"
     then
       self.cacheUpdateNeeded = true
@@ -784,7 +812,7 @@ Bagshui:AddComponent(function()
     -- If the function returns false, don't continue processing.
     local eventFunction = self[eventAction]
     if type(eventFunction) == "function" then
-      if eventFunction(self) == false then
+      if eventFunction(self, event, arg1, arg2) == false then
         return
       end
     end
@@ -889,10 +917,19 @@ Bagshui:AddComponent(function()
       return
     end
 
-    -- Lock/unlock events need a cache update, but not when a container has
-    -- been picked up.
-    if event == "ITEM_LOCK_CHANGED" and not Bagshui.pickedUpBagSlotNum and not Bagshui.putDownBagSlotNum then
-      self.forceCacheUpdate = true
+    -- Lock/unlock events identify the affected bag on WotLK. Use the same
+    -- dirty-container path as BAG_UPDATE; fall back to a full scan when an older
+    -- client does not provide a usable container ID.
+    if
+      (event == "ITEM_LOCK_CHANGED" or event == "ITEM_LOCKED")
+      and not Bagshui.pickedUpBagSlotNum
+      and not Bagshui.putDownBagSlotNum
+    then
+      if self.myContainerIds[arg1] then
+        self.dirtyContainers[arg1] = true
+      else
+        self.forceCacheUpdate = true
+      end
     end
 
     -- Assume any other event that gets this far may require a cache update.

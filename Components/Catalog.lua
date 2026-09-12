@@ -73,6 +73,10 @@ Bagshui:AddComponent(function()
       otherCharacter = {},
     },
 
+    -- Runtime-only itemString membership maps for the arrays above and `items`.
+    -- Keys are the item list tables so external catalog table contracts remain unchanged.
+    itemTableMembership = {},
+
     -- Array of locations where items are stored (BS_INVENTORY_TYPE_UI_ORDER followed by EQUIPPED).
     -- Iterated to build per-character tooltips.
     itemLocations = {},
@@ -233,8 +237,8 @@ Bagshui:AddComponent(function()
       BsUtil.TableClear(self.totals[realm][self:TotalKey(SUBTOTAL_TYPE.Current)])
     end
 
-    -- Wipe the item tracking table so `AddToItemTable()` will work.
-    BsUtil.TableClear(self.itemListTables.currentCharacter)
+    -- Wipe the current-character items and their deduplication index.
+    self:ClearItemTable(self.itemListTables.currentCharacter)
 
     -- Get the item counts for the current character.
     self:CalculatePerCharacterTotal(
@@ -247,7 +251,7 @@ Bagshui:AddComponent(function()
     self:CalculateSubtotals(self.itemListTables.currentCharacter, SUBTOTAL_TYPE.Current)
 
     -- Build unique, sorted list of all items on the account.
-    BsUtil.TableClear(self.items)
+    self:ClearItemTable(self.items)
     for _, itemTable in pairs(self.itemListTables) do
       for _, item in ipairs(itemTable) do
         if type(item.id) == "number" and item.id > 0 then
@@ -477,21 +481,54 @@ Bagshui:AddComponent(function()
     end
   end
 
+  --- Clear an item list and its reusable deduplication membership map.
+  ---@param itemTable table Array of item tables.
+  function Catalog:ClearItemTable(itemTable)
+    BsUtil.TableClear(itemTable)
+
+    if self.itemTableMembership[itemTable] then
+      BsUtil.TableClear(self.itemTableMembership[itemTable])
+    end
+  end
+
   --- Add the given item's itemString to the provided item list table, but only
   --- if it hasn't already been inserted.
   ---@param item table Bagshui ItemInfo table.
-  ---@param uniqueItemList any
+  ---@param uniqueItemList table Array where the deduplicated item will be stored.
+  ---@param copy boolean? Make a copy before inserting.
   function Catalog:AddToItemTable(item, uniqueItemList, copy)
-    -- Don't duplicate.
-    for _, existingItem in ipairs(uniqueItemList) do
-      if existingItem.itemString == item.itemString then
-        return
+    local itemString = item.itemString
+    local itemTableMembership = self.itemTableMembership[uniqueItemList]
+
+    -- Build the map on first use so existing callers can provide a pre-populated list.
+    if not itemTableMembership then
+      itemTableMembership = {}
+      self.itemTableMembership[uniqueItemList] = itemTableMembership
+      for _, existingItem in ipairs(uniqueItemList) do
+        if existingItem.itemString then
+          itemTableMembership[existingItem.itemString] = true
+        end
+      end
+    end
+
+    -- Don't duplicate. ItemInfo records normally always have an itemString; retain
+    -- the old behavior for malformed records where it is missing.
+    if itemString and itemTableMembership[itemString] then
+      return
+    elseif not itemString then
+      for _, existingItem in ipairs(uniqueItemList) do
+        if not existingItem.itemString then
+          return
+        end
       end
     end
 
     local itemToInsert = copy and BsUtil.TableCopy(item) or item
 
     table.insert(uniqueItemList, itemToInsert)
+    if itemString then
+      itemTableMembership[itemString] = true
+    end
   end
 
   --- Prepare the storage location, then add up the item total.

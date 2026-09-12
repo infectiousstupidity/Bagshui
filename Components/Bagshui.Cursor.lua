@@ -13,7 +13,7 @@ Bagshui:LoadComponent(function()
   function Bagshui:PickupItem(item, inventoryClass, itemSlotButton, callPickupContainerItem)
     -- Track where the pickup call came from so we know whether it's being put down
     -- in the same inventory or moved to a different one.
-    local owningFrame = inventoryClass and inventoryClass.uiFrame or _G.this
+    local owningFrame = inventoryClass and inventoryClass.uiFrame or itemSlotButton
 
     -- Reasons to update or clear tracking properties.
     if
@@ -181,10 +181,18 @@ _G.CursorHasItem()
       if callPickupContainerItem then
         _G.PickupContainerItem(item.bagNum, item.slotNum)
       else
+        -- Bagshui item buttons are parented to layout groups rather than to a
+        -- Blizzard container frame. FrameXML derives the bag and slot from
+        -- button:GetParent():GetID() and button:GetID(), so passing the real
+        -- button on WotLK makes it act on the group's ID instead of the item's
+        -- actual container. Use the existing proxy whose GetParent/GetID
+        -- methods return item.bagNum/item.slotNum. The global `this` shim in
+        -- Inventory:ItemButton_OnClick() remains available to Vanilla hooks.
+        local frameXmlItemButton = itemSlotButton.bagshuiData.getIdProxy or itemSlotButton
         if _G.IsModifiedClick and _G.IsModifiedClick() then
-          _G.ContainerFrameItemButton_OnModifiedClick(_G.this, "LeftButton")
+          _G.ContainerFrameItemButton_OnModifiedClick(frameXmlItemButton, "LeftButton")
         else
-          _G.ContainerFrameItemButton_OnClick(_G.this, "LeftButton")
+          _G.ContainerFrameItemButton_OnClick(frameXmlItemButton, "LeftButton")
         end
       end
     end

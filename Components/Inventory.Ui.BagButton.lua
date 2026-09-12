@@ -125,7 +125,7 @@ Bagshui:AddComponent(function()
           return
         end
 
-        local this = bagButton or _G.this
+        local this = bagButton
         this.bagshuiData.mouseIsOver = true
 
         -- Display tooltip.
@@ -142,14 +142,14 @@ Bagshui:AddComponent(function()
         end
 
         -- Show slot available/used counts.
-        inventory.ui.frames.bagBar:GetScript("OnEnter")()
+        inventory.ui.frames.bagBar:GetScript("OnEnter")(inventory.ui.frames.bagBar)
       end)
 
-      bagSlotButton:SetScript("OnLeave", function()
-        _G.this.bagshuiData.mouseIsOver = false
+      bagSlotButton:SetScript("OnLeave", function(bagButton)
+        bagButton.bagshuiData.mouseIsOver = false
 
         -- Hide tooltip.
-        if _G.GameTooltip:IsOwned(_G.this) then
+        if _G.GameTooltip:IsOwned(bagButton) then
           _G.GameTooltip:Hide()
         end
 
@@ -157,11 +157,11 @@ Bagshui:AddComponent(function()
         _G.ResetCursor()
 
         -- Stop any further tooltip refreshes.
-        _G.this.bagshuiData.tooltipCooldownUpdate = nil
+        bagButton.bagshuiData.tooltipCooldownUpdate = nil
 
         -- Remove bag highlight unless it's locked on.
         if
-          inventory.highlightItemsInContainerId == _G.this.bagshuiData.bagNum
+          inventory.highlightItemsInContainerId == bagButton.bagshuiData.bagNum
           and not inventory.highlightItemsInContainerLocked
           and not inventory.highlightItemsContainerSlot
         then
@@ -170,20 +170,20 @@ Bagshui:AddComponent(function()
         end
 
         -- Decide whether to keep displaying slot available/used counts.
-        inventory.ui.frames.bagBar:GetScript("OnLeave")()
+        inventory.ui.frames.bagBar:GetScript("OnLeave")(inventory.ui.frames.bagBar)
       end)
 
       -- Storing at a higher scope to reduce garbage collector load.
 
       local onUpdate_refreshTooltip, onUpdate_cooldownStart, onUpdate_cooldownDuration, onUpdate_cooldownEnable
 
-      bagSlotButton:SetScript("OnUpdate", function(elapsed)
+      bagSlotButton:SetScript("OnUpdate", function(bagButton, elapsed)
         onUpdate_refreshTooltip = false
 
         -- Remove item highlighting if there's no longer a container in the slot.
         if
-          inventory.highlightItemsInContainerLocked == _G.this.bagshuiData.bagNum
-          and not inventory:BagSlotButtonHasBag(_G.this)
+          inventory.highlightItemsInContainerLocked == bagButton.bagshuiData.bagNum
+          and not inventory:BagSlotButtonHasBag(bagButton)
           and not inventory.highlightItemsContainerSlot
         then
           inventory.highlightItemsInContainerLocked = nil
@@ -193,22 +193,22 @@ Bagshui:AddComponent(function()
         end
 
         -- "Progress bar" for bag swapping using the cooldown animation.
-        if type(_G.this.bagshuiData.progressPercent) == "number" then
+        if type(bagButton.bagshuiData.progressPercent) == "number" then
           -- Use this by setting the bagButton.bagshuiData.progressPercent property to a value 0-100.
           -- At 100, the completion shine animation will trigger.
 
-          if not _G.this.bagshuiData.progressFinishing then
+          if not bagButton.bagshuiData.progressFinishing then
             -- This has to run on every frame to hold the cooldown at the same spot.
-            self:ShowProgressViaCooldown(_G.this.bagshuiData.cooldown, _G.this.bagshuiData.progressPercent)
+            self:ShowProgressViaCooldown(bagButton.bagshuiData.cooldown, bagButton.bagshuiData.progressPercent)
           end
 
-          if _G.this.bagshuiData.progressPercent == 100 then
-            _G.this.bagshuiData.progressFinishing = true
+          if bagButton.bagshuiData.progressPercent == 100 then
+            bagButton.bagshuiData.progressFinishing = true
           end
 
-          if _G.this.bagshuiData.progressFinishing and not _G.this.bagshuiData.cooldown:IsVisible() then
-            _G.this.bagshuiData.progressPercent = nil
-            _G.this.bagshuiData.progressFinishing = nil
+          if bagButton.bagshuiData.progressFinishing and not bagButton.bagshuiData.cooldown:IsVisible() then
+            bagButton.bagshuiData.progressPercent = nil
+            bagButton.bagshuiData.progressFinishing = nil
           end
 
           -- elseif this.bagshuiData.inventorySlotId then
@@ -218,30 +218,30 @@ Bagshui:AddComponent(function()
           -- Ui:ShowProgressViaCooldown() to hide any cooldown text that was present.
           --
           -- Normal cooldown behavior (primary containers can't have cooldowns so they're excluded.)
-          -- onUpdate_cooldownStart, onUpdate_cooldownDuration, onUpdate_cooldownEnable = _G.GetInventoryItemCooldown("player", _G.this.bagshuiData.inventorySlotId)
-          -- _G.CooldownFrame_SetTimer(_G.this.bagshuiData.cooldown, onUpdate_cooldownStart, onUpdate_cooldownDuration, onUpdate_cooldownEnable);
+          -- onUpdate_cooldownStart, onUpdate_cooldownDuration, onUpdate_cooldownEnable = _G.GetInventoryItemCooldown("player", bagButton.bagshuiData.inventorySlotId)
+          -- _G.CooldownFrame_SetTimer(bagButton.bagshuiData.cooldown, onUpdate_cooldownStart, onUpdate_cooldownDuration, onUpdate_cooldownEnable);
         end
 
         -- Safeguard to prevent tooltips from popping up when the mouse has already left.
-        if not _G.this.bagshuiData.mouseIsOver then
-          _G.this.bagshuiData.tooltipCooldownUpdate = nil
+        if not bagButton.bagshuiData.mouseIsOver then
+          bagButton.bagshuiData.tooltipCooldownUpdate = nil
           return
         end
 
-        if _G.this.bagshuiData.tooltipCooldownUpdate ~= nil then
+        if bagButton.bagshuiData.tooltipCooldownUpdate ~= nil then
           -- tooltipCooldownUpdate is initially set to 1 by OnEnter when there's a cooldown.
           -- Here we subtract the elapsed time in seconds, which will eventually go below 0
           -- so long as the property isn't wiped by moving the mouse off this item.
-          _G.this.bagshuiData.tooltipCooldownUpdate = _G.this.bagshuiData.tooltipCooldownUpdate - elapsed
+          bagButton.bagshuiData.tooltipCooldownUpdate = bagButton.bagshuiData.tooltipCooldownUpdate - elapsed
 
           -- Don't proceed until it's been more than 1 second.
-          if _G.this.bagshuiData.tooltipCooldownUpdate < 0 then
+          if bagButton.bagshuiData.tooltipCooldownUpdate < 0 then
             onUpdate_refreshTooltip = true
           end
         end
 
         if onUpdate_refreshTooltip then
-          inventory:ShowBagSlotTooltip(_G.this)
+          inventory:ShowBagSlotTooltip(bagButton)
         end
       end)
 
@@ -251,7 +251,7 @@ Bagshui:AddComponent(function()
       -- - Handle placing items in primary containers.
       local oldOnClick = bagSlotButton:GetScript("OnClick")
       bagSlotButton:SetScript("OnClick", function(bagButton, mouseButton)
-        local this = bagButton or _G.this
+        local this = bagButton
         local bagNum = this.bagshuiData.bagNum
 
         local hasBag = inventory:BagSlotButtonHasBag(this)
@@ -388,7 +388,7 @@ Bagshui:AddComponent(function()
       -- OnDragStart -- just use the original OnDragStart, but block it when offline or in Edit Mode.
       local oldOnDragStart = bagSlotButton:GetScript("OnDragStart")
       bagSlotButton:SetScript("OnDragStart", function(bagButton, mouseButton)
-        local this = bagButton or _G.this
+        local this = bagButton
         if not inventory.online or inventory.editMode then
           return
         end
@@ -422,10 +422,19 @@ Bagshui:AddComponent(function()
   -- For the WoW API functions BagSlotButton_OnClick() and BagSlotButton_OnDrag)(),
   -- we need to first call the original function, then make sure our window is up to date.
   ---@param wowApiFunctionName string Hooked WoW API function that triggered this call.
-  function Inventory:BagSlotButton_OnHook(wowApiFunctionName)
+  function Inventory:BagSlotButton_OnHook(wowApiFunctionName, bagSlotButton, ...)
+    -- Vanilla supplies the target only through the legacy global and expects
+    -- the original handler to be called without a new frame argument.
+    local hasExplicitButton = bagSlotButton ~= nil
+    bagSlotButton = bagSlotButton or _G.this
+
     -- Don't interfere if this isn't a Bagshui button
-    if not string.find(_G.this:GetName(), self.bagSlotNameFormat) then
-      self.hooks:OriginalHook(wowApiFunctionName)
+    if not string.find(bagSlotButton:GetName(), self.bagSlotNameFormat) then
+      if hasExplicitButton then
+        self.hooks:OriginalHook(wowApiFunctionName, bagSlotButton, ...)
+      else
+        self.hooks:OriginalHook(wowApiFunctionName)
+      end
       return
     end
 
@@ -433,7 +442,11 @@ Bagshui:AddComponent(function()
     if not self.online then
       return
     end
-    self.hooks:OriginalHook(wowApiFunctionName)
+    if hasExplicitButton then
+      self.hooks:OriginalHook(wowApiFunctionName, bagSlotButton, ...)
+    else
+      self.hooks:OriginalHook(wowApiFunctionName)
+    end
     self:Update()
   end
 
@@ -454,7 +467,7 @@ Bagshui:AddComponent(function()
   --- code, but that's not a priority.
   ---@param bagSlotButton table Button widget.
   function Inventory:ShowBagSlotTooltip(bagSlotButton)
-    local this = bagSlotButton or _G.this
+    local this = bagSlotButton
 
     -- Cases when nothing should happen.
     if

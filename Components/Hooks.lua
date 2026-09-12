@@ -96,26 +96,12 @@ Bagshui:LoadComponent(function()
         -- Store the original function reference.
         self.originalHookFunctions[wowApiFunctionName] = originalFunction
 
-        -- Install hook.
-        -- Not using variadic arguments (...) - see https://github.com/shagu/pfUI/commit/e7dd8776f142a708e4677c1299ff89f1bcbe2baf
-        _G.setglobal(wowApiFunctionName, function(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10)
+        -- Install hook and preserve the complete original argument list.
+        _G.setglobal(wowApiFunctionName, function(...)
           if classSelf then
-            return hookFunction(
-              classSelf,
-              wowApiFunctionName,
-              arg1,
-              arg2,
-              arg3,
-              arg4,
-              arg5,
-              arg6,
-              arg7,
-              arg8,
-              arg9,
-              arg10
-            )
+            return hookFunction(classSelf, wowApiFunctionName, ...)
           end
-          return hookFunction(wowApiFunctionName, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10)
+          return hookFunction(wowApiFunctionName, ...)
         end)
       else
         Bagshui:PrintDebug("Hook function for '" .. wowApiFunctionName .. "' is already installed")
@@ -145,49 +131,29 @@ Bagshui:LoadComponent(function()
   end
 
   --- Call the original hook function if it exists.
-  --- Not using variadic arguments (...) - see https://github.com/shagu/pfUI/commit/e7dd8776f142a708e4677c1299ff89f1bcbe2baf
   ---@param wowApiFunctionName string Name of the original WoW API function to call.
-  ---@param arg1 any?
-  ---@param arg2 any?
-  ---@param arg3 any?
-  ---@param arg4 any?
-  ---@param arg5 any?
-  ---@param arg6 any?
-  ---@param arg7 any?
-  ---@param arg8 any?
-  ---@param arg9 any?
-  ---@param arg10 any?
+  ---@param ... any Original function arguments.
   ---@return any? # Return value from the original WoW API function.
-  function Hooks:OriginalHook(wowApiFunctionName, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10)
+  function Hooks:OriginalHook(wowApiFunctionName, ...)
     if wowApiFunctionName == nil then
       return
     end
     if self.originalHookFunctions[wowApiFunctionName] then
-      return self.originalHookFunctions[wowApiFunctionName](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10)
+      return self.originalHookFunctions[wowApiFunctionName](...)
     end
   end
 
   -- Hook handling (skeleton) / warning message.
   -- This won't get called unless a hook isn't properly set up.
-  -- Not using variadic arguments (...) - see https://github.com/shagu/pfUI/commit/e7dd8776f142a708e4677c1299ff89f1bcbe2baf
   ---@param wowApiFunctionName string Name of the original WoW API function to call.
-  ---@param arg1 any?
-  ---@param arg2 any?
-  ---@param arg3 any?
-  ---@param arg4 any?
-  ---@param arg5 any?
-  ---@param arg6 any?
-  ---@param arg7 any?
-  ---@param arg8 any?
-  ---@param arg9 any?
-  ---@param arg10 any?
-  function Hooks:OnHook(wowApiFunctionName, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10)
+  ---@param ... any Original function arguments.
+  function Hooks:OnHook(wowApiFunctionName, ...)
     Bagshui:PrintWarning(
       "Hook function "
         .. tostring(wowApiFunctionName)
         .. " triggered. Calling original API function (this probably shouldn't happen)."
     )
-    self:OriginalHook(wowApiFunctionName, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10)
+    self:OriginalHook(wowApiFunctionName, ...)
   end
 end)
 

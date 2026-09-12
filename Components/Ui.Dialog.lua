@@ -125,24 +125,24 @@ Bagshui:AddComponent(function()
           -- Special stuff for dialog behaviors on top of the base ScrollableTextWindow scripts.
 
           local oldOnShow = self.uiFrame:GetScript("OnShow")
-          self.uiFrame:SetScript("OnShow", function()
+          self.uiFrame:SetScript("OnShow", function(frame, ...)
             if self.suppressShowHideEvents then
               return
             end
             if oldOnShow then
-              oldOnShow()
+              oldOnShow(frame, ...)
             end
             self:SetParentHasModalDialog(true)
             self.recycle = false
           end)
 
           local oldOnHide = self.uiFrame:GetScript("OnHide")
-          self.uiFrame:SetScript("OnHide", function()
+          self.uiFrame:SetScript("OnHide", function(frame, ...)
             if self.suppressShowHideEvents then
               return
             end
             if oldOnHide then
-              oldOnHide()
+              oldOnHide(frame, ...)
             end
 
             if self.modalParent then
@@ -156,10 +156,10 @@ Bagshui:AddComponent(function()
 
           -- EditBox changes.
           local oldOnChanged = self.editBox:GetScript("OnTextChanged")
-          self.editBox:SetScript("OnTextChanged", function()
-            oldOnChanged()
+          self.editBox:SetScript("OnTextChanged", function(editBox, ...)
+            oldOnChanged(editBox, ...)
             if self.dialogProperties.button1DisableOnEmptyText or self.dialogProperties.button1DisableOnEmptyText then
-              local state = string.len(BsUtil.Trim(_G.this:GetText() or "")) > 0 and "Enable" or "Disable"
+              local state = string.len(BsUtil.Trim(editBox:GetText() or "")) > 0 and "Enable" or "Disable"
               if self.dialogProperties.button1DisableOnEmptyText then
                 self.uiFrame.bagshuiData.button1[state](self.uiFrame.bagshuiData.button1)
               end
@@ -374,18 +374,18 @@ Bagshui:AddComponent(function()
         _bagshuiUrl = "",
 
         -- Set the default value for the edit box
-        OnShow = function()
+        OnShow = function(popup)
           -- For whatever reason, Blizzard has hardcoded which dialogs are wide instead of
           -- resizing based on hasWideEditBox, so the only way to get the dialog wide enough
           -- is to set it manually.
-          _G.this:SetWidth(420)
-          _G[_G.this:GetName() .. "WideEditBox"]:SetText(_G.StaticPopupDialogs[dialogName]._bagshuiUrl)
-          _G[_G.this:GetName() .. "WideEditBox"]:SetFocus()
-          _G[_G.this:GetName() .. "WideEditBox"]:HighlightText()
+          popup:SetWidth(420)
+          _G[popup:GetName() .. "WideEditBox"]:SetText(_G.StaticPopupDialogs[dialogName]._bagshuiUrl)
+          _G[popup:GetName() .. "WideEditBox"]:SetFocus()
+          _G[popup:GetName() .. "WideEditBox"]:HighlightText()
           -- We also need to reposition Button1 because apparently you're not supposed to
           -- have a dialog with an EditBox and one button.
-          _G[_G.this:GetName() .. "Button1"]:ClearAllPoints()
-          _G[_G.this:GetName() .. "Button1"]:SetPoint("TOP", _G[_G.this:GetName() .. "EditBox"], "BOTTOM", 0, -8)
+          _G[popup:GetName() .. "Button1"]:ClearAllPoints()
+          _G[popup:GetName() .. "Button1"]:SetPoint("TOP", _G[popup:GetName() .. "EditBox"], "BOTTOM", 0, -8)
         end,
 
         -- Clear text on hide so it doesn't bleed over to other dialogs.

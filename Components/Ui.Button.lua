@@ -125,8 +125,8 @@ Bagshui:AddComponent(function()
 
     -- Add OnClick handler to show the drop-down.
     local buttonOldOnClick = button:GetScript("OnClick")
-    button:SetScript("OnClick", function()
-      local dropDown = _G.this:GetParent()
+    button:SetScript("OnClick", function(dropDownButton, ...)
+      local dropDown = dropDownButton:GetParent()
       -- We'll need this after calling the original OnClick.
       local originalParentHeight = dropDown:GetHeight()
 
@@ -136,7 +136,7 @@ Bagshui:AddComponent(function()
       end
 
       -- ToggleDropDownMenu().
-      buttonOldOnClick()
+      buttonOldOnClick(dropDownButton, ...)
 
       -- Reset to reset height because ToggleDropDownMenu's call to UIDropDownMenu_Initialize changes it.
       dropDown:SetHeight(originalParentHeight)
@@ -152,7 +152,7 @@ Bagshui:AddComponent(function()
     --- Special considerations to make the menu display correctly.
     ---@param dropDownWidget any
     local function dropDownMenuPrep(dropDownWidget)
-      local this = dropDownWidget or _G.this
+      local this = dropDownWidget
       local originalHeight = this:GetHeight()
 
       local function loadMenuCallback(arg1, arg2)
@@ -300,18 +300,18 @@ Bagshui:AddComponent(function()
         buttonOpts.tooltipGroupElement = button
       end
 
-      button:SetScript("OnEnter", function()
-        _G.this.bagshuiData.mouseIsOver = true
-        self:ShowIconButtonTooltip(_G.this)
+      button:SetScript("OnEnter", function(buttonFrame)
+        buttonFrame.bagshuiData.mouseIsOver = true
+        self:ShowIconButtonTooltip(buttonFrame)
       end)
 
-      button:SetScript("OnLeave", function()
-        _G.this.bagshuiData.mouseIsOver = false
-        if BsIconButtonTooltip:IsOwned(_G.this) then
-          Bagshui:ShortenTooltipDelay(_G.this, true)
+      button:SetScript("OnLeave", function(buttonFrame)
+        buttonFrame.bagshuiData.mouseIsOver = false
+        if BsIconButtonTooltip:IsOwned(buttonFrame) then
+          Bagshui:ShortenTooltipDelay(buttonFrame, true)
           BsIconButtonTooltip:Hide()
         end
-        _G.this.bagshuiData.keepTooltipVisible = nil
+        buttonFrame.bagshuiData.keepTooltipVisible = nil
       end)
     end
 
@@ -335,17 +335,17 @@ Bagshui:AddComponent(function()
         onClick(buttonFrame, mouseButton)
       end)
       -- Shift/unshift HighlightTexture to match pushed/normal texture on mousedown/mouseup.
-      button:SetScript("OnMouseDown", function()
-        if not _G.this.bagshuiData.highlightTexture then
-          _G.this.bagshuiData.highlightTexture = _G.this:GetHighlightTexture()
+      button:SetScript("OnMouseDown", function(buttonFrame)
+        if not buttonFrame.bagshuiData.highlightTexture then
+          buttonFrame.bagshuiData.highlightTexture = buttonFrame:GetHighlightTexture()
         end
-        _G.this.bagshuiData.highlightTexture:ClearAllPoints()
-        _G.this.bagshuiData.highlightTexture:SetPoint("TOPLEFT", _G.this, "TOPLEFT", 0, -0.5)
-        _G.this.bagshuiData.highlightTexture:SetPoint("BOTTOMRIGHT", _G.this, "BOTTOMRIGHT", 0, -0.5)
+        buttonFrame.bagshuiData.highlightTexture:ClearAllPoints()
+        buttonFrame.bagshuiData.highlightTexture:SetPoint("TOPLEFT", buttonFrame, "TOPLEFT", 0, -0.5)
+        buttonFrame.bagshuiData.highlightTexture:SetPoint("BOTTOMRIGHT", buttonFrame, "BOTTOMRIGHT", 0, -0.5)
       end)
-      button:SetScript("OnMouseUp", function()
-        _G.this.bagshuiData.highlightTexture:ClearAllPoints()
-        _G.this.bagshuiData.highlightTexture:SetAllPoints(_G.this)
+      button:SetScript("OnMouseUp", function(buttonFrame)
+        buttonFrame.bagshuiData.highlightTexture:ClearAllPoints()
+        buttonFrame.bagshuiData.highlightTexture:SetAllPoints(buttonFrame)
       end)
     end
     if buttonOpts.mouseButtons then
@@ -357,17 +357,17 @@ Bagshui:AddComponent(function()
     -- Set up other scripts.
     if buttonOpts.onEnter then
       local oldOnEnter = button:GetScript("OnEnter")
-      button:SetScript("OnEnter", function()
-        if buttonOpts.onEnter() ~= false and oldOnEnter then
-          oldOnEnter()
+      button:SetScript("OnEnter", function(buttonFrame, ...)
+        if buttonOpts.onEnter(buttonFrame, ...) ~= false and oldOnEnter then
+          oldOnEnter(buttonFrame, ...)
         end
       end)
     end
     if buttonOpts.onLeave then
       local oldOnLeave = button:GetScript("OnLeave")
-      button:SetScript("OnLeave", function()
-        if buttonOpts.onLeave() ~= false and oldOnLeave then
-          oldOnLeave()
+      button:SetScript("OnLeave", function(buttonFrame, ...)
+        if buttonOpts.onLeave(buttonFrame, ...) ~= false and oldOnLeave then
+          oldOnLeave(buttonFrame, ...)
         end
       end)
     end
@@ -379,12 +379,12 @@ Bagshui:AddComponent(function()
       button:SetScript("OnHide", buttonOpts.onHide)
     end
 
-    button:SetScript("OnUpdate", function()
-      if _G.this.bagshuiData and _G.this.bagshuiData.isOnCooldown then
-        self:UpdateIconButtonCooldown(_G.this)
+    button:SetScript("OnUpdate", function(buttonFrame, elapsed)
+      if buttonFrame.bagshuiData and buttonFrame.bagshuiData.isOnCooldown then
+        self:UpdateIconButtonCooldown(buttonFrame)
       end
       if buttonOpts.onUpdate then
-        buttonOpts.onUpdate()
+        buttonOpts.onUpdate(buttonFrame, elapsed)
       end
     end)
 
@@ -543,7 +543,7 @@ Bagshui:AddComponent(function()
       button.bagshuiData.cooldownPercentRemaining = nil
       button.bagshuiData.cooldownTexture:Hide()
 
-      if not _G.this.bagshuiData.shineFrame or not _G.this.bagshuiData.shineFrame:IsVisible() then
+      if not button.bagshuiData.shineFrame or not button.bagshuiData.shineFrame:IsVisible() then
         self:ShineIconButton(button)
       end
     else
@@ -573,27 +573,27 @@ Bagshui:AddComponent(function()
 
   --- Shrink and fade the "cooldown finished" shine, eventually hiding it once the animation is done.
   --- Credit: https://github.com/anzz1/OmniCC/blob/master/OmniCC.lua
-  local function IconButton_ShineFrame_OnUpdate()
+  local function IconButton_ShineFrame_OnUpdate(shineFrame)
     -- Control animation speed.
-    if _G.GetTime() - (_G.this.bagshuiData.lastShineUpdate or 0) < 0.1 then
+    if _G.GetTime() - (shineFrame.bagshuiData.lastShineUpdate or 0) < 0.1 then
       return
     end
 
-    iconButton_ShineFrame_OnUpdate_alpha = _G.this.bagshuiData.shine:GetAlpha()
-    _G.this.bagshuiData.shine:SetAlpha(iconButton_ShineFrame_OnUpdate_alpha * 0.95)
+    iconButton_ShineFrame_OnUpdate_alpha = shineFrame.bagshuiData.shine:GetAlpha()
+    shineFrame.bagshuiData.shine:SetAlpha(iconButton_ShineFrame_OnUpdate_alpha * 0.95)
 
     if iconButton_ShineFrame_OnUpdate_alpha < 0.1 then
       -- Animation is done, so hide the shine.
-      _G.this:Hide()
+      shineFrame:Hide()
     else
       -- Shrink the shine as the alpha value decreases.
-      _G.this.bagshuiData.shine:SetHeight(
-        iconButton_ShineFrame_OnUpdate_alpha * _G.this:GetHeight() * ICON_BUTTON_SHINE_SCALE
+      shineFrame.bagshuiData.shine:SetHeight(
+        iconButton_ShineFrame_OnUpdate_alpha * shineFrame:GetHeight() * ICON_BUTTON_SHINE_SCALE
       )
-      _G.this.bagshuiData.shine:SetWidth(
-        iconButton_ShineFrame_OnUpdate_alpha * _G.this:GetWidth() * ICON_BUTTON_SHINE_SCALE
+      shineFrame.bagshuiData.shine:SetWidth(
+        iconButton_ShineFrame_OnUpdate_alpha * shineFrame:GetWidth() * ICON_BUTTON_SHINE_SCALE
       )
-      _G.this.bagshuiData.lastShineUpdate = _G.GetTime()
+      shineFrame.bagshuiData.lastShineUpdate = _G.GetTime()
     end
   end
 

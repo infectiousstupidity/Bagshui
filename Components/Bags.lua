@@ -55,7 +55,7 @@ Bagshui:AddComponent(function()
     --- the item in that slot, instead of trying to put it in the bag. Note that due to the behavior of
     --- `PutItemInBag()`, this will *not* intercept bags, but that's handled in the bag slot button's OnClick.
     bagSlotButton:SetScript("OnClick", function(bagButton, mouseButton)
-      local this = bagButton or _G.this
+      local this = bagButton
       if
         -- Pass through to the default Bagshui OnClick for bags
         -- so native bag swapping can be invoked.
@@ -130,33 +130,34 @@ Bagshui:AddComponent(function()
 
   --- Execute `self:Open()/Close()` and the superclass version only if there isn't a reason to block it.
   ---@param action "Open"|"Close"
+  ---@param triggerEvent string? Event that requested the action.
   ---@return boolean? # false if event was blocked.
-  function Bags:SmartOpenClose(action)
+  function Bags:SmartOpenClose(action, triggerEvent)
     -- Block based on settings.
     if
-      type(_G.event) == "string"
+      type(triggerEvent) == "string"
       and (
-        (string.find(_G.event, "^AUCTION_HOUSE_") and self.settings.toggleBagsWithAuctionHouse == false)
-        or (string.find(_G.event, "^BANKFRAME_") and self.settings.toggleBagsWithBankFrame == false)
-        or (string.find(_G.event, "^MAIL_") and self.settings.toggleBagsWithMailFrame == false)
-        or (string.find(_G.event, "^TRADE_") and self.settings.toggleBagsWithTradeFrame == false)
+        (string.find(triggerEvent, "^AUCTION_HOUSE_") and self.settings.toggleBagsWithAuctionHouse == false)
+        or (string.find(triggerEvent, "^BANKFRAME_") and self.settings.toggleBagsWithBankFrame == false)
+        or (string.find(triggerEvent, "^MAIL_") and self.settings.toggleBagsWithMailFrame == false)
+        or (string.find(triggerEvent, "^TRADE_") and self.settings.toggleBagsWithTradeFrame == false)
       )
     then
       return
     end
 
     -- Proceed with action.
-    self._super[action](self)
+    self._super[action](self, triggerEvent)
   end
 
   --- Add intelligence to Open().
-  function Bags:Open()
-    self:SmartOpenClose("Open")
+  function Bags:Open(triggerEvent)
+    self:SmartOpenClose("Open", triggerEvent)
   end
 
   --- Add intelligence to Close().
-  function Bags:Close()
-    self:SmartOpenClose("Close")
+  function Bags:Close(triggerEvent)
+    self:SmartOpenClose("Close", triggerEvent)
     self.lastOpenEventTrigger = nil
   end
 end)

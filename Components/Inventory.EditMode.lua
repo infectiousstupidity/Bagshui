@@ -450,17 +450,18 @@ Bagshui:AddComponent(function()
         _bagshuiDefaultEditBoxText = "",
 
         -- Set the default value for the edit box.
-        OnShow = function()
-          _G[_G.this:GetName() .. "EditBox"]:SetText(_G.StaticPopupDialogs[dialogName]._bagshuiDefaultEditBoxText)
-          _G[_G.this:GetName() .. "EditBox"]:SetFocus()
+        OnShow = function(popup)
+          _G[popup:GetName() .. "EditBox"]:SetText(_G.StaticPopupDialogs[dialogName]._bagshuiDefaultEditBoxText)
+          _G[popup:GetName() .. "EditBox"]:SetFocus()
         end,
 
         --- Okay was clicked, so change the group name.
+        ---@param popup table Static popup frame.
         ---@param data table Reference to `self.renameGroup_Data`, passed through via the dialog's `data` property.
-        OnAccept = function(data)
+        OnAccept = function(popup, data)
           self.editModeGroupHighlight = nil
           if self.groups[data.groupId] then
-            self.groups[data.groupId].name = _G[_G.this:GetParent():GetName() .. "EditBox"]:GetText()
+            self.groups[data.groupId].name = _G[popup:GetName() .. "EditBox"]:GetText()
           end
           self:ManagePendingGroupAssignments(data.groupId, true)
           self:EditModeWindowUpdate()
@@ -469,8 +470,9 @@ Bagshui:AddComponent(function()
         --- Cancel was clicked.
         --- For new groups, this means the group is no longer wanted.
         --- For existing groups, just remove highlighting.
+        ---@param popup table Static popup frame.
         ---@param data table Reference to `self.renameGroup_Data`, passed through via the dialog's `data` property.
-        OnCancel = function(data)
+        OnCancel = function(popup, data)
           if data.groupIsNew then
             local row, column = self:GroupIdToRowColumn(data.groupId)
             if row and column then

@@ -158,7 +158,7 @@ Bagshui:AddComponent(function()
           local oldOnChanged = self.editBox:GetScript("OnTextChanged")
           self.editBox:SetScript("OnTextChanged", function(editBox, ...)
             oldOnChanged(editBox, ...)
-            if self.dialogProperties.button1DisableOnEmptyText or self.dialogProperties.button1DisableOnEmptyText then
+            if self.dialogProperties.button1DisableOnEmptyText or self.dialogProperties.button2DisableOnEmptyText then
               local state = string.len(BsUtil.Trim(editBox:GetText() or "")) > 0 and "Enable" or "Disable"
               if self.dialogProperties.button1DisableOnEmptyText then
                 self.uiFrame.bagshuiData.button1[state](self.uiFrame.bagshuiData.button1)
@@ -202,7 +202,7 @@ Bagshui:AddComponent(function()
           self.uiFrame.bagshuiData.button1:SetWidth(buttonWidth)
 
           self.uiFrame.bagshuiData.button2 = self.ui:CreateButton(
-            "Button1",
+            "Button2",
             self.uiFrame,
             _G.TEXT(_G.CANCEL),
             function()

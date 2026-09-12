@@ -1419,7 +1419,7 @@ Bagshui:AddComponent(function()
         notClosableByLogout = true,
         -- Abandon changes to the object (no need for OnCancel as that simply needs to do nothing).
         -- The editor parameter comes from the dialog's data property which is set below.
-        OnAccept = function(editor)
+        OnAccept = function(_, editor)
           editor.uiFrame.bagshuiData.dirty = false
           editor.uiFrame:Hide()
         end,

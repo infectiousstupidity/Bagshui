@@ -260,7 +260,7 @@ Bagshui:AddComponent(function()
   ---@param shadeOn boolean Whether to show or hide the shade.
   ---@param text string? Text to display in the middle of the shade.
   function Ui:SetWindowShade(window, shadeOn, text)
-    if not window.bagshuiData and window.bagshuiData.isWindow then
+    if not (window and window.bagshuiData and window.bagshuiData.isWindow) then
       return
     end
 

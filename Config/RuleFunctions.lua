@@ -611,7 +611,7 @@ Bagshui:AddComponent(function()
         end
 
         -- Extra check to make sure Outfitter is ready to go.
-        if not _G.Outfitter_IsInitialized and _G.Outfitter_IsInitialized() then
+        if type(_G.Outfitter_IsInitialized) ~= "function" or not _G.Outfitter_IsInitialized() then
           return false
         end
 
@@ -673,6 +673,9 @@ Bagshui:AddComponent(function()
         -- }
 
         -- gOutfitter_Settings is NOT a typo!
+        if type(_G.gOutfitter_Settings) ~= "table" then
+          return false
+        end
         local outfitterOutfits = _G.gOutfitter_Settings.Outfits
         if type(outfitterOutfits) ~= "table" then
           return false

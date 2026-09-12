@@ -61,6 +61,8 @@ Bagshui:AddComponent(function()
         -- Open/close with Trade frame (NOT TradeSkill frame)).
         TRADE_SHOW = "Open",
         TRADE_CLOSED = "Close",
+        -- Automatically sell items the player explicitly marked for vendor sale.
+        MERCHANT_SHOW = "SellMarkedItems",
       },
 
       apiFunctionsToHook = {

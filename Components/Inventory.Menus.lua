@@ -814,6 +814,16 @@ Bagshui:AddComponent(function()
           },
         },
         {
+          _bagshuiMenuItemId = "ItemMarkForSale",
+          text = L.Menu_Item_MarkForSale,
+          tooltipTitle = L.Menu_Item_MarkForSale,
+          tooltipText = L.Menu_Item_MarkForSale_TooltipText,
+          func = function(item)
+            Bagshui.components.Bags:ToggleItemMarkedForSale(item)
+            self:CloseMenusAndClearFocuses()
+          end,
+        },
+        {
           text = L.Move,
           tooltipTitle = string.format(L.Prefix_Move, L.Item),
           tooltipText = L.Menu_Item_Move_TooltipText,
@@ -1054,6 +1064,27 @@ Bagshui:AddComponent(function()
               menuItem.tCoordTop = BsSkin.itemSlotIconTexCoord[3]
               menuItem.tCoordBottom = BsSkin.itemSlotIconTexCoord[4]
             end
+          elseif menuItem._bagshuiMenuItemId == "ItemMarkForSale" then
+            -- Bags only: one-shot auto-vendor mark for the current character.
+            local canMarkForSale = (
+              self.inventoryType == BS_INVENTORY_TYPE.BAGS
+              and self.online
+              and isMeaningfulItemId
+              and item.emptySlot ~= 1
+              and item.itemString
+              and item.itemString ~= ""
+            )
+            local isMarkedForSale = canMarkForSale and Bagshui.components.Bags:IsItemMarkedForSale(item)
+
+            menuItem.arg1 = item
+            menuItem.disabled = not canMarkForSale
+            menuItem.checked = isMarkedForSale and true or false
+            menuItem.text = isMarkedForSale and L.Menu_Item_RemoveSaleMark or L.Menu_Item_MarkForSale
+            menuItem.tooltipTitle = menuItem.text
+            menuItem.tooltipText = isMarkedForSale
+                and L.Menu_Item_RemoveSaleMark_TooltipText
+              or L.Menu_Item_MarkForSale_TooltipText
+            menuItem._bagshuiHide = self.inventoryType ~= BS_INVENTORY_TYPE.BAGS
           elseif menuItem._bagshuiMenuItemId == "ItemMove" then
             -- Item: Disable the Move menu for empty slots since they can't be directly assigned to a category, only via a rule function.
             menuItem.disabled = not isMeaningfulItemId

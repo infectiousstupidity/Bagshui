@@ -736,6 +736,15 @@ Bagshui:AddComponent(function()
           setTooltipPositionAgain = true
         end
 
+        if
+          self.inventoryType == BS_INVENTORY_TYPE.BAGS
+          and Bagshui.components.Bags:IsItemMarkedForSale(item)
+        then
+          _G.GameTooltip:AddLine(
+            BS_FONT_COLOR.YELLOW .. L.Inventory_Item_MarkedForSale .. FONT_COLOR_CODE_CLOSE
+          )
+        end
+
         -- There are situations where we may want to truncate the tooltip
         -- at the first empty line to leave more room for the Bagshui tooltip.
         -- This code was originally written when information was being added

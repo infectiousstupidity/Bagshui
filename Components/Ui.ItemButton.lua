@@ -635,6 +635,20 @@ Bagshui:LoadComponent(function()
     buttonInfo.stockBadgeAlpha = 0
     buttonInfo.topLeftBadgeAlpha = 0
 
+    -- Marked-for-sale badge has top priority so the player can always see items
+    -- queued for automatic sale at the next merchant.
+    if
+      inventory
+      and inventory.inventoryType == BS_INVENTORY_TYPE.BAGS
+      and Bagshui.components.Bags
+      and Bagshui.components.Bags:IsItemMarkedForSale(item)
+    then
+      self:SetShadowedTexture(buttonComponents.topLeftBadge, "Interface\\Icons\\INV_Misc_Coin_01")
+      self:SetShadowedTextureTexCoord(buttonComponents.topLeftBadge, 0, 1, 0, 1)
+      self:SetShadowedTextureVertexColor(buttonComponents.topLeftBadge, 1, 1, 1)
+      buttonInfo.topLeftBadgeAlpha = 1
+    end
+
     -- Quality color badges can be enabled globally via Colorblind Mode.
     local qualityBadgeTexCoords = BS_INVENTORY_QUALITY_BADGE_COORD[item.quality]
     if
@@ -664,7 +678,11 @@ Bagshui:LoadComponent(function()
     end
 
     -- Active quest badge (uses the top left badge slot).
-    if settings.itemActiveQuestBadges and Bagshui.activeQuestItems[item.name] then
+    if
+      buttonInfo.topLeftBadgeAlpha == 0
+      and settings.itemActiveQuestBadges
+      and Bagshui.activeQuestItems[item.name]
+    then
       self:SetShadowedTexture(buttonComponents.topLeftBadge, "ItemSlot\\Quest")
       self:SetShadowedTextureTexCoord(buttonComponents.topLeftBadge, 0, 1, 0, 1)
       buttonInfo.topLeftBadgeAlpha = 1

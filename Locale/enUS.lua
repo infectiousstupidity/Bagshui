@@ -277,6 +277,7 @@ Bagshui:LoadComponent(function()
     ["Inventory_Item_SellProtection_ConfirmSale"] = "Control+Right-Click to confirm sale.",
     ["Inventory_Item_SellProtection_Reason"] = "Protected: %s.",
     ["Inventory_Item_SellProtection_OverrideHint"] = "Skip confirmation: Ctrl+Alt+Shift+Right-Click.",
+    ["Inventory_Item_MarkedForSale"] = "Marked for sale at the next merchant.",
 
     -- Bag tooltips.
     ["Bag_SlotsNeededToSwap"] = "%d more free slot(s) required to swap.",
@@ -447,6 +448,10 @@ Bagshui:LoadComponent(function()
     ["Menu_Item_MatchedCategories_TooltipTitle"] = "Matched Categories",
     ["Menu_Item_MatchedCategories_TooltipText"] = "List of all categories that match this item, ordered by sequence.",
     ["Menu_Item_MatchedCategory_TooltipText"] = "Click to edit.",
+    ["Menu_Item_MarkForSale"] = "Mark for Sale",
+    ["Menu_Item_MarkForSale_TooltipText"] = "Automatically sell this specific item the next time you open a merchant.",
+    ["Menu_Item_RemoveSaleMark"] = "Remove Sale Mark",
+    ["Menu_Item_RemoveSaleMark_TooltipText"] = "Keep this item instead of automatically selling it at a merchant.",
     ["Menu_Item_Move_TooltipText"] = "Pick up this item so it can be directly assigned to a new category.",
     ["Menu_Item_RemoveFromEquippedGear"] = "Remove from Equipped",
     ["Menu_Item_RemoveFromEquippedGear_TooltipText"] = "Take this item out of the list of gear you've equipped (i.e. the Equipped() rule will no longer match).",

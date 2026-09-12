@@ -174,8 +174,8 @@ Bagshui:AddComponent(function()
     -- Declare reusable group creation function.
     if not ui.CreateGroupIfNotExists then
       -- Wrapper function.
-      local function Group_OnEnter()
-        ui.inventory:Group_OnEnter()
+      local function Group_OnEnter(group)
+        ui.inventory:Group_OnEnter(group)
       end
 
       function ui.CreateGroupIfNotExists(elementNum)

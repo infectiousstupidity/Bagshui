@@ -625,6 +625,10 @@ settingInfo.scope ~= BS_SETTING_SCOPE.INVENTORY
       validatedValue = tonumber(validatedValue)
     end
 
+    if validatedValue == nil then
+      return default
+    end
+
     if min then
       validatedValue = math.max(validatedValue, min)
     end
@@ -665,7 +669,7 @@ settingInfo.scope ~= BS_SETTING_SCOPE.INVENTORY
       validatedValue = settingInfo.defaultValue
     end
 
-    return value
+    return validatedValue
   end
 
   --- Validation: BS_SETTING_TYPE.COLOR

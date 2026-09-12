@@ -362,16 +362,16 @@ Bagshui:AddComponent(function()
 
     -- Only allow escape to close the manager frame once all editors are closed.
     uiFrame.bagshuiData.lastDirtyCheck = _G.GetTime()
-    uiFrame:SetScript("OnUpdate", function()
-      if _G.GetTime() - _G.this.bagshuiData.lastDirtyCheck > 0.075 then
-        _G.this.openChildrenCount = 0
+    uiFrame:SetScript("OnUpdate", function(frame)
+      if _G.GetTime() - frame.bagshuiData.lastDirtyCheck > 0.075 then
+        frame.openChildrenCount = 0
         for _, editor in ipairs(self.editors) do
           if editor.uiFrame:IsVisible() then
-            _G.this.openChildrenCount = _G.this.openChildrenCount + 1
+            frame.openChildrenCount = frame.openChildrenCount + 1
           end
         end
-        _G.this.bagshuiData.dirty = (_G.this.openChildrenCount > 0)
-        _G.this.bagshuiData.lastDirtyCheck = _G.GetTime()
+        frame.bagshuiData.dirty = (frame.openChildrenCount > 0)
+        frame.bagshuiData.lastDirtyCheck = _G.GetTime()
       end
     end)
 
@@ -391,9 +391,9 @@ Bagshui:AddComponent(function()
         scrollableList_DisableFunc = self.disableObjectCreationFunc,
         scrollableList_AutomaticAnchor = true,
         xOffset = BsSkin.toolbarSpacing,
-        onClick = function()
+        onClick = function(button, mouseButton)
           if self.addButtonOnClick then
-            self.addButtonOnClick()
+            self.addButtonOnClick(button, mouseButton)
           else
             self:NewObject()
           end
@@ -913,9 +913,9 @@ Bagshui:AddComponent(function()
 
     -- Wipe object info on close.
     local oldOnHide = uiFrame:GetScript("OnHide")
-    uiFrame:SetScript("OnHide", function()
+    uiFrame:SetScript("OnHide", function(frame, ...)
       if oldOnHide then
-        oldOnHide()
+        oldOnHide(frame, ...)
       end
       self.objectId = nil
       self.originalObject = nil
@@ -932,11 +932,11 @@ Bagshui:AddComponent(function()
 
     -- Block close button if dirty.
     local oldCloseButtonOnClose = self.uiFrame.bagshuiData.closeButton:GetScript("OnClick")
-    self.uiFrame.bagshuiData.closeButton:SetScript("OnClick", function()
+    self.uiFrame.bagshuiData.closeButton:SetScript("OnClick", function(button, ...)
       if uiFrame.bagshuiData.dirty then
         dirtyFunc()
       else
-        oldCloseButtonOnClose()
+        oldCloseButtonOnClose(button, ...)
       end
     end)
 
@@ -1167,49 +1167,49 @@ Bagshui:AddComponent(function()
           editBox.bagshuiData.icon = icon
 
           -- OnTabPressed callback -- move focus to the next EditBox.
-          editBox:SetScript("OnTabPressed", function()
-            _G.this:ClearFocus()
+          editBox:SetScript("OnTabPressed", function(fieldEditBox)
+            fieldEditBox:ClearFocus()
 
             -- First time tab is pressed, find the next EditBox.
-            if not _G.this.bagshuiData.nextField then
-              for i = _G.this.bagshuiData.fieldIndex + 1, table.getn(self.editorFields) do
+            if not fieldEditBox.bagshuiData.nextField then
+              for i = fieldEditBox.bagshuiData.fieldIndex + 1, table.getn(self.editorFields) do
                 if self.editBoxes[self.editorFields[i]] then
-                  _G.this.bagshuiData.nextField = self.editBoxes[self.editorFields[i]]
+                  fieldEditBox.bagshuiData.nextField = self.editBoxes[self.editorFields[i]]
                   break
                 end
               end
 
               -- Wrap around to the first EditBox if we reach the end.
-              if not _G.this.bagshuiData.nextField and self.editBoxes[self.editorFields[1]] then
-                _G.this.bagshuiData.nextField = self.editBoxes[self.editorFields[1]]
+              if not fieldEditBox.bagshuiData.nextField and self.editBoxes[self.editorFields[1]] then
+                fieldEditBox.bagshuiData.nextField = self.editBoxes[self.editorFields[1]]
               end
             end
 
             -- Move to the next EditBox.
-            if _G.this.bagshuiData.nextField then
-              _G.this.bagshuiData.nextField:SetFocus()
+            if fieldEditBox.bagshuiData.nextField then
+              fieldEditBox.bagshuiData.nextField:SetFocus()
             end
           end)
 
           -- OnTextChanged callback -- Copy value to updated object and refresh UI state.
           local oldOnChanged = editBox:GetScript("OnTextChanged")
-          editBox:SetScript("OnTextChanged", function()
+          editBox:SetScript("OnTextChanged", function(fieldEditBox, ...)
             -- Call original OnTextChanged and stop if it returns false.
             -- This is for faking read-only EditBoxes.
-            if oldOnChanged and oldOnChanged() == false then
+            if oldOnChanged and oldOnChanged(fieldEditBox, ...) == false then
               return
             end
 
             -- Copy value to self.updatedObject.
-            local value = _G.this:GetText()
+            local value = fieldEditBox:GetText()
             if string.len(value) > 0 then
-              if type(self.objectTemplate[_G.this.bagshuiData.fieldName]) == "number" then
+              if type(self.objectTemplate[fieldEditBox.bagshuiData.fieldName]) == "number" then
                 value = tonumber(value)
               end
             else
               value = nil
             end
-            self:GetFieldStorageTable(_G.this.bagshuiData.fieldName)[_G.this.bagshuiData.fieldName] = value
+            self:GetFieldStorageTable(fieldEditBox.bagshuiData.fieldName)[fieldEditBox.bagshuiData.fieldName] = value
 
             self:UpdateState()
           end)

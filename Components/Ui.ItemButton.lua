@@ -3,13 +3,150 @@
 Bagshui:LoadComponent(function()
   local Ui = Bagshui.prototypes.Ui
 
+  -- Central modifier-key hover controller.
+  --
+  -- Scrollable list rows and item buttons used to each own an OnUpdate script
+  -- that polled IsAltKeyDown()/IsControlKeyDown()/IsShiftKeyDown() so their
+  -- tooltips could be refreshed when a modifier key was pressed or released.
+  -- That kept one modifier poll active per materialized row (plus one more per
+  -- item button in item lists) even though at most one row can actually be
+  -- hovered.
+  --
+  -- Instead, hovered targets register themselves below on OnEnter and
+  -- unregister on OnLeave. When modifier key state changes, only the
+  -- registered (i.e. currently hovered) targets are refreshed:
+  -- - WotLK (3.x) clients raise MODIFIER_STATE_CHANGED (added in 3.0.2), so
+  --   refreshes are fully event driven and no per-frame work is installed.
+  -- - Vanilla (1.12) clients don't have that event, so a single throttled
+  --   OnUpdate poller is used instead, and it's only active while at least
+  --   one target is registered.
+  --
+  -- This controller lives in this file (instead of each consumer) because it
+  -- must be shared by Ui.ScrollableList.lua, this file, and
+  -- Inventory.Ui.ItemButton.lua, and this file is the first of the three to
+  -- load.
+  local modifierHoverTargets = {} -- frame -> refresh function. Only currently hovered targets are registered.
+  local modifierHoverTargetCount = 0
+  local modifierHoverControllerFrame
+  local modifierHover_lastAltKey, modifierHover_lastControlKey, modifierHover_lastShiftKey
+  local modifierHover_pollElapsed
+
+  -- MODIFIER_STATE_CHANGED was added in 3.0.2. GetBuildInfo() returns the
+  -- supported interface number as its fourth value on WotLK; Vanilla either
+  -- omits it or reports a value below 30000, selecting the fallback poller.
+  local _, _, _, clientInterface = _G.GetBuildInfo()
+  local hasModifierStateChangedEvent = (type(clientInterface) == "number" and clientInterface >= 30000) or false
+
+  local function getModifierHoverControllerFrame()
+    if not modifierHoverControllerFrame then
+      -- Created lazily so no frame is created at XML load time.
+      modifierHoverControllerFrame = _G.CreateFrame("Frame", "BagshuiModifierKeyHoverFrame")
+      modifierHoverControllerFrame:SetScript("OnEvent", function()
+        Ui:RefreshModifierKeyHoverTargets()
+      end)
+    end
+    return modifierHoverControllerFrame
+  end
+
+  -- Vanilla (1.12) fallback for MODIFIER_STATE_CHANGED: a single throttled
+  -- poll that only runs while at least one hover target is registered. 20
+  -- checks per second keeps modifier-driven tooltip refreshes responsive
+  -- without running every frame.
+  local function modifierHover_Poll(_, elapsed)
+    modifierHover_pollElapsed = modifierHover_pollElapsed + elapsed
+    if modifierHover_pollElapsed < 0.05 then
+      return
+    end
+    modifierHover_pollElapsed = 0
+    local altKey, controlKey, shiftKey = _G.IsAltKeyDown(), _G.IsControlKeyDown(), _G.IsShiftKeyDown()
+    if
+      altKey ~= modifierHover_lastAltKey
+      or controlKey ~= modifierHover_lastControlKey
+      or shiftKey ~= modifierHover_lastShiftKey
+    then
+      modifierHover_lastAltKey = altKey
+      modifierHover_lastControlKey = controlKey
+      modifierHover_lastShiftKey = shiftKey
+      Ui:RefreshModifierKeyHoverTargets()
+    end
+  end
+
+  --- Refresh every registered (hovered) target so its tooltip can react to the
+  --- new modifier key state.
+  function Ui:RefreshModifierKeyHoverTargets()
+    -- Refreshing a target can unregister it or other targets mid-traversal.
+    -- Removing keys during traversal is safe in Lua, and a target registered
+    -- mid-traversal is at worst refreshed on the next modifier change, which
+    -- is fine because its OnEnter() already ran with the current modifier
+    -- state.
+    for target, refreshFunc in pairs(modifierHoverTargets) do
+      -- Frames hidden while hovered (e.g. the list was closed or repopulated)
+      -- don't fire OnLeave, so stale registrations can linger until the mouse
+      -- moves. The old per-frame OnUpdate polls never ran on hidden frames, so
+      -- skip them to keep behavior identical.
+      if target:IsVisible() then
+        refreshFunc()
+      end
+    end
+  end
+
+  --- Register a frame so its tooltip gets refreshed when modifier key state
+  --- changes while the mouse is over it.
+  ---@param target table Frame being hovered (scrollable list entry frame or item button).
+  ---@param refreshFunc function Called when a modifier key is pressed or released. Should call the target's OnEnter with its "refresh tooltip only" flag set.
+  function Ui:RegisterModifierKeyHoverTarget(target, refreshFunc)
+    if not modifierHoverTargets[target] then
+      modifierHoverTargetCount = modifierHoverTargetCount + 1
+      if modifierHoverTargetCount == 1 then
+        if hasModifierStateChangedEvent then
+          getModifierHoverControllerFrame():RegisterEvent("MODIFIER_STATE_CHANGED")
+        else
+          -- Snapshot the current state so the poller doesn't immediately
+          -- trigger a redundant refresh for a target that just entered.
+          modifierHover_lastAltKey = _G.IsAltKeyDown()
+          modifierHover_lastControlKey = _G.IsControlKeyDown()
+          modifierHover_lastShiftKey = _G.IsShiftKeyDown()
+          modifierHover_pollElapsed = 0
+          getModifierHoverControllerFrame():SetScript("OnUpdate", modifierHover_Poll)
+        end
+      end
+    end
+    modifierHoverTargets[target] = refreshFunc
+  end
+
+  --- Unregister a frame so it no longer gets refreshed on modifier key state changes.
+  ---@param target table Frame previously registered with `Ui:RegisterModifierKeyHoverTarget()`.
+  function Ui:UnregisterModifierKeyHoverTarget(target)
+    if modifierHoverTargets[target] then
+      modifierHoverTargets[target] = nil
+      modifierHoverTargetCount = modifierHoverTargetCount - 1
+      if modifierHoverTargetCount == 0 then
+        if hasModifierStateChangedEvent then
+          getModifierHoverControllerFrame():UnregisterEvent("MODIFIER_STATE_CHANGED")
+        else
+          getModifierHoverControllerFrame():SetScript("OnUpdate", nil)
+        end
+      end
+    end
+  end
+
   --- Default OnEnter event script for standalone item slot buttons.
-  ---@param targetItemButton table? Alternate button to use instead of global `this`.
+  ---@param targetItemButton table Item button.
   ---@param fromEntryFrame boolean? This is being called as a result of the mouse entering the associated scrollable list entry frame (explained in the comment above `if this.bagshuiData.entryFrame then...`).
   ---@param refreshTooltipOnly boolean? Don't do anything other than reload the tooltip.
   local function ItemButton_OnEnter(targetItemButton, fromEntryFrame, refreshTooltipOnly)
-    local this = targetItemButton or _G.this
+    local this = targetItemButton
     this.bagshuiData.mouseIsOver = true
+
+    -- Register with the shared modifier-key controller so the tooltip
+    -- refreshes when Alt/Ctrl/Shift are pressed or released while the mouse
+    -- is over this button. `refreshTooltipOnly` refreshes are triggered by
+    -- the controller itself, so the button is already registered.
+    if not refreshTooltipOnly then
+      Ui:RegisterModifierKeyHoverTarget(this, function()
+        ItemButton_OnEnter(this, nil, true)
+      end)
+    end
 
     -- The `itemString` or an `item` table populated by `ItemInfo:Get()` MUST be
     -- set on the `bagshuiData` table of the button for the tooltip to appear.
@@ -78,11 +215,12 @@ Bagshui:LoadComponent(function()
   end
 
   --- Default OnLeave event script for standalone item slot buttons.
-  ---@param targetItemButton table? Alternate button to use instead of global `this`.
+  ---@param targetItemButton table Item button.
   ---@param fromEntryFrame boolean? This is being called as a result of the mouse leaving the associated scrollable list entry frame (explained in the comment above `if this.bagshuiData.entryFrame then...`).
   local function ItemButton_OnLeave(targetItemButton, fromEntryFrame)
-    local this = targetItemButton or _G.this
+    local this = targetItemButton
     this.bagshuiData.mouseIsOver = false
+    Ui:UnregisterModifierKeyHoverTarget(this)
     Bagshui:HideTooltips(this)
 
     -- Coordinate OnLeave with the scrollable list entry frame when applicable so that
@@ -99,9 +237,9 @@ Bagshui:LoadComponent(function()
 
   --- Default OnClick handler for standalone item buttons.
   --- Since they're not tied to an actual bag slot, we can't leverage `ContainerFrameItemButton_OnClick()`.
-  ---@param targetItemButton table? Alternate button to use instead of global `this`.
+  ---@param targetItemButton table Item button.
   local function ItemButton_OnClick(targetItemButton)
-    local this = targetItemButton or _G.this
+    local this = targetItemButton
     if _G.IsShiftKeyDown() and this.bagshuiData.item and this.bagshuiData.item.itemLink then
       -- I guess we'll be nice and provide WIM support here since it's pretty simple.
       if _G.IsAddOnLoaded("WIM") and _G.WIM_EditBoxInFocus then
@@ -113,25 +251,8 @@ Bagshui:LoadComponent(function()
   end
 
   --- Default OnHide handler for standalone item buttons.
-  local function ItemButton_OnHide()
-    Bagshui:HideTooltips()
-  end
-
-  -- Default OnUpdate for standalone item buttons to refresh tooltips when modifier keys are pressed/released.
-  local function ItemButton_OnUpdate()
-    if not _G.this.bagshuiData.mouseIsOver then
-      return
-    end
-    if
-      _G.this.bagshuiData.altKeyState ~= _G.IsAltKeyDown()
-      or _G.this.bagshuiData.controlKeyState ~= _G.IsControlKeyDown()
-      or _G.this.bagshuiData.shiftKeyState ~= _G.IsShiftKeyDown()
-    then
-      ItemButton_OnEnter(_G.this, nil, true)
-      _G.this.bagshuiData.altKeyState = _G.IsAltKeyDown()
-      _G.this.bagshuiData.controlKeyState = _G.IsControlKeyDown()
-      _G.this.bagshuiData.shiftKeyState = _G.IsShiftKeyDown()
-    end
+  local function ItemButton_OnHide(itemButton)
+    Bagshui:HideTooltips(itemButton)
   end
 
   --- Create a new item slot button.
@@ -166,7 +287,6 @@ Bagshui:LoadComponent(function()
       button:SetScript("OnClick", ItemButton_OnClick)
     end
     button:SetScript("OnLeave", ItemButton_OnLeave)
-    button:SetScript("OnUpdate", ItemButton_OnUpdate)
     button:SetScript("OnHide", ItemButton_OnHide)
 
     -- Apply visual customizations.

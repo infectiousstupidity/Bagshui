@@ -183,7 +183,8 @@ Bagshui:AddComponent(function()
         if not toolbarItem.menuIgnoreOnClick then
           menuItem.func = toolbarItem.func
             or function()
-              self.ui.buttons.toolbar[toolbarItem.id]:GetScript("OnClick")()
+              local toolbarButton = self.ui.buttons.toolbar[toolbarItem.id]
+              toolbarButton:GetScript("OnClick")(toolbarButton, "LeftButton")
             end
         end
 
@@ -1160,8 +1161,8 @@ Bagshui:AddComponent(function()
     -- Direct Assignment Class Selection Menu.
     -- Triggered when a Class Category is chosen from the Direct Assignment menu.
 
-    local function toggleClassCategoryDirectAssignment(arg1)
-      BsCategories:ToggleItemCategoryAssignment(arg1.categoryId, arg1.itemId, _G.this.value)
+    local function toggleClassCategoryDirectAssignment(menuButton, arg1)
+      BsCategories:ToggleItemCategoryAssignment(arg1.categoryId, arg1.itemId, menuButton.value)
     end
 
     local classMenu = BsUtil.TableCopy(BsGameInfo.characterClassMenu)

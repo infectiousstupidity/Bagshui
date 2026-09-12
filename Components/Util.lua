@@ -711,14 +711,14 @@ Bagshui:LoadComponent(function()
 
   --- StaticPopupDialogs substitute for the `enterClicksFirstButton` property since
   --- that doesn't exist in Vanilla. Assign this to the `EditBoxOnEnterPressed` property.
-  function Util.StaticPopupDialogs_EnterClicksFirstButton()
-    _G.StaticPopup_OnClick(_G.this:GetParent(), 1)
+  function Util.StaticPopupDialogs_EnterClicksFirstButton(editBox)
+    _G.StaticPopup_OnClick(editBox:GetParent(), 1)
   end
 
   --- Dialogs with a text box should clear their text when hidden because some built-in
   --- ones (like `DELETE_GOOD_ITEM`) don't do it OnShow.
-  function Util.StaticPopupDialogs_ClearTextOnHide()
-    _G[_G.this:GetName() .. "EditBox"]:SetText("")
+  function Util.StaticPopupDialogs_ClearTextOnHide(popup)
+    _G[popup:GetName() .. "EditBox"]:SetText("")
   end
 
   --- Pause code execution until a dialog is dismissed.
@@ -758,6 +758,10 @@ Bagshui:LoadComponent(function()
 
   --#region Import/Export
 
+  -- Keep pasted data from causing excessive memory use during decoding or decompression.
+  local MAX_IMPORT_INPUT_BYTES = 1024 * 1024
+  local MAX_IMPORT_OUTPUT_BYTES = 4 * 1024 * 1024
+
   --- Prepare a table for export by serializing, compressing, and encoding.
   ---@param tbl table Object to export.
   ---@param humanReadable boolean? `true` to only pretty-print and NOT compress/encode.
@@ -772,14 +776,33 @@ Bagshui:LoadComponent(function()
 
   --- Import a table previously prepared by `Util.Export()`.
   ---@param str string
-  ---@return table?
+  ---@return table? imported
+  ---@return string? errorMessage
   function Util.Import(str)
+    if type(str) ~= "string" then
+      return nil, "Import data must be a string"
+    end
+    if string.len(str) > MAX_IMPORT_INPUT_BYTES then
+      return nil, "Import data exceeds the size limit"
+    end
+
     local import = Util.Trim(str)
     if not string.find(import, "^{") then
-      import = Util.Trim(Util.Decompress(Util.Decode(import)) or "")
+      local decoded = Util.Decode(import)
+      if not decoded then
+        return nil, "Import data is not valid encoded data"
+      end
+      import = Util.Decompress(decoded, MAX_IMPORT_OUTPUT_BYTES)
+      if not import then
+        return nil, "Import data could not be decompressed or exceeds the size limit"
+      end
+      import = Util.Trim(import)
     end
     if not string.find(import, "^{") then
-      return nil
+      return nil, "Import data is not a serialized table"
+    end
+    if string.len(import) > MAX_IMPORT_OUTPUT_BYTES then
+      return nil, "Decoded import data exceeds the size limit"
     end
     return Util.Deserialize(import)
   end
@@ -819,17 +842,32 @@ Bagshui:LoadComponent(function()
     return match and str or nil
   end
 
+  -- Lua 5.1 decimal escapes are always written with three digits so a following
+  -- numeric character cannot accidentally become part of the escape sequence.
+  local PRINTABLE_STRING_ESCAPES = {
+    ["\\"] = "\\\\",
+    ['"'] = '\\"',
+    ["\n"] = "\\n",
+    ["\r"] = "\\r",
+    ["\t"] = "\\t",
+  }
+
+  local function escapePrintableStringCharacter(character)
+    return PRINTABLE_STRING_ESCAPES[character] or string.format("\\%03d", string.byte(character))
+  end
+
   --- Transform the given value into a string that can be printed or used in serialization.
-  --- Strings will be surrounded by double quotes (and double quotes within the string escaped)
+  --- Strings will be surrounded by double quotes, with quotes, backslashes, and
+  --- unsafe control bytes escaped as valid Lua 5.1 string-literal content.
   ---@param v any
-  ---@param noStringEscapes boolean? Don't escape quotes and backslashes in strings.
+  ---@param noStringEscapes boolean? Don't escape quotes, backslashes, or control bytes in strings.
   ---@return string
   function Util.ToPrintableString(v, noStringEscapes)
     if type(v) == "string" or type(v) == "userdata" then
       if noStringEscapes then
         return '"' .. v .. '"'
       else
-        return '"' .. string.gsub(string.gsub(v, "\\", "\\\\"), '"', '\\"') .. '"'
+        return '"' .. string.gsub(v, '[%z\1-\31\127\\"]', escapePrintableStringCharacter) .. '"'
       end
     end
     return tostring(v)
@@ -837,17 +875,25 @@ Bagshui:LoadComponent(function()
 
   --- Turn a previously-serialized table in string form back into a table.
   ---@param str string? Serialized table.
-  ---@return table?
+  ---@return table? deserialized
+  ---@return string? errorMessage
   function Util.Deserialize(str)
     if type(str) ~= "string" or string.len(str) < 1 then
-      return nil
+      return nil, "Serialized data must be a non-empty string"
     end
-    local deserialize = assert(loadstring("return " .. str))
-    if type(deserialize) == "function" then
-      -- Add some sort of protection against code injection.
-      setfenv(deserialize, {})
-      return deserialize()
+
+    local deserialize, compileError = loadstring("return " .. str)
+    if type(deserialize) ~= "function" then
+      return nil, compileError or "Serialized data could not be compiled"
     end
+
+    -- Prevent deserialized expressions from accessing the WoW global environment.
+    setfenv(deserialize, {})
+    local success, deserialized = pcall(deserialize)
+    if not success then
+      return nil, deserialized
+    end
+    return deserialized
   end
 
   --- LZW-compress a string.
@@ -916,8 +962,9 @@ Bagshui:LoadComponent(function()
   --- Decompress a previously LZW-compressed string.
   --- Credit: pfUi decompress() by Shagu - https://github.com/shagu/pfUI/blob/master/modules/share.lua
   ---@param input any
-  ---@return nil
-  function Util.Decompress(input)
+  ---@param maxOutputBytes number? Stop if the decompressed result would exceed this size.
+  ---@return string?
+  function Util.Decompress(input, maxOutputBytes)
     -- based on Rochet2's lzw compression
     if type(input) ~= "string" or string.len(input) < 1 then
       return nil
@@ -925,7 +972,11 @@ Bagshui:LoadComponent(function()
 
     local control = string.sub(input, 1, 1)
     if control == "u" then
-      return string.sub(input, 2)
+      local uncompressed = string.sub(input, 2)
+      if maxOutputBytes and string.len(uncompressed) > maxOutputBytes then
+        return nil
+      end
+      return uncompressed
     elseif control ~= "c" then
       return nil
     end
@@ -947,7 +998,12 @@ Bagshui:LoadComponent(function()
     local result = {}
     local n = 1
     local last = string.sub(input, 1, 2)
-    result[n] = dict[last]
+    local first = dict[last]
+    if not first then
+      return nil
+    end
+    result[n] = first
+    local resultLen = string.len(first)
     n = n + 1
     for i = 3, len, 2 do
       local code = string.sub(input, i, i + 1)
@@ -958,6 +1014,7 @@ Bagshui:LoadComponent(function()
       local toAdd = dict[code]
       if toAdd then
         result[n] = toAdd
+        resultLen = resultLen + string.len(toAdd)
         n = n + 1
         local str = lastStr .. string.sub(toAdd, 1, 1)
         if a >= 256 then
@@ -972,6 +1029,7 @@ Bagshui:LoadComponent(function()
       else
         local str = lastStr .. string.sub(lastStr, 1, 1)
         result[n] = str
+        resultLen = resultLen + string.len(str)
         n = n + 1
         if a >= 256 then
           a, b = 0, b + 1
@@ -982,6 +1040,9 @@ Bagshui:LoadComponent(function()
         end
         dict[string.char(a, b)] = str
         a = a + 1
+      end
+      if maxOutputBytes and resultLen > maxOutputBytes then
+        return nil
       end
       last = code
     end
@@ -1055,11 +1116,8 @@ Bagshui:LoadComponent(function()
     local bit_pattern = ""
     local decoded = ""
 
-    to_decode = string.gsub(to_decode, BS_NEWLINE, "")
-    to_decode = string.gsub(to_decode, " ", "")
-
     for i = 1, string.len(unpadded) do
-      local char = string.sub(to_decode, i, i)
+      local char = string.sub(unpadded, i, i)
       local offset, _ = string.find(index_table, char)
       if offset == nil then
         return nil

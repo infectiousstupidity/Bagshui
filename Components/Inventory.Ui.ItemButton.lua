@@ -31,17 +31,17 @@ Bagshui:AddComponent(function()
 
   --- Special OnHide for Inventory item slot buttons to also hide tooltips and
   --- the stack split frame.
-  local function InventoryItemButton_OnHide()
+  local function InventoryItemButton_OnHide(itemButton, ...)
     -- oldOnHide was captured during button creation in CreateInventoryItemSlotButton().
-    _G.this.bagshuiData.oldOnHide()
+    itemButton.bagshuiData.oldOnHide(itemButton, ...)
 
-    if BsInfoTooltip:IsOwned(_G.this) then
+    if BsInfoTooltip:IsOwned(itemButton) then
       BsInfoTooltip:Hide()
     end
 
     -- If the stack splitting frame is visible and owned by this inventory window, hide it.
     -- (this.hasStackSplit is managed by Blizzard's FrameXML code).
-    if _G.this.hasStackSplit == 1 then
+    if itemButton.hasStackSplit == 1 then
       _G.StackSplitFrame:Hide()
     end
   end
@@ -70,17 +70,17 @@ Bagshui:AddComponent(function()
           inventory:ItemButton_OnClick("LeftButton", true, itemButton)
         end
       end
-      function inventory._itemSlotButton_ScriptWrapper_OnUpdate()
-        inventory:ItemButton_OnUpdate(_G.arg1)
+      function inventory._itemSlotButton_ScriptWrapper_OnUpdate(itemButton, elapsed)
+        inventory:ItemButton_OnUpdate(itemButton, elapsed)
       end
-      function inventory._itemSlotButton_ScriptWrapper_OnEnter()
-        inventory:ItemButton_OnEnter()
+      function inventory._itemSlotButton_ScriptWrapper_OnEnter(itemButton)
+        inventory:ItemButton_OnEnter(itemButton)
       end
-      function inventory._itemSlotButton_ScriptWrapper_OnLeave()
-        inventory:ItemButton_OnLeave()
+      function inventory._itemSlotButton_ScriptWrapper_OnLeave(itemButton)
+        inventory:ItemButton_OnLeave(itemButton)
       end
-      function inventory._itemSlotButton_ScriptWrapper_OnHide()
-        inventory:ItemButton_OnEnter()
+      function inventory._itemSlotButton_ScriptWrapper_OnHide(itemButton)
+        inventory:ItemButton_OnEnter(itemButton)
       end
     end
 
@@ -350,7 +350,6 @@ Bagshui:AddComponent(function()
   ---@param mouseButton string
   ---@param itemButton table?
   function Inventory:ItemButton_PreClick(mouseButton, itemButton)
-    itemButton = itemButton or _G.this
     if not itemButton or not itemButton.bagshuiData then
       return
     end
@@ -571,7 +570,6 @@ Bagshui:AddComponent(function()
   --- OnEnter mostly handles tooltip stuff.
   ---@param itemButton table? Item slot button widget.
   function Inventory:ItemButton_OnEnter(itemButton)
-    itemButton = itemButton or _G.this
 
     -- Cases when nothing should happen.
     if
@@ -616,12 +614,15 @@ Bagshui:AddComponent(function()
       self.settings.hint_bagshuiTooltip = true
     end
 
-    -- Record current modifier key state (referenced by OnUpdate() to decide if it has changed).
-    -- Translating return values from 1/nil to true/false so the *KeyDown properties don't have
-    -- to be initialized to non-nil.
-    buttonInfo.altKeyDown = (_G.IsAltKeyDown() == 1)
-    buttonInfo.controlKeyDown = (_G.IsControlKeyDown() == 1)
-    buttonInfo.shiftKeyDown = (_G.IsShiftKeyDown() == 1)
+    -- Register with the shared modifier-key controller so this button's tooltip
+    -- refreshes when Alt/Ctrl/Shift are pressed or released while the mouse is
+    -- over it. Registration happens after the early returns above so buttons
+    -- that skip OnEnter processing (mouse disabled, menu open, or an Edit Mode
+    -- cursor item) aren't refreshed, matching the old per-button OnUpdate
+    -- behavior.
+    self.ui:RegisterModifierKeyHoverTarget(itemButton, function()
+      self:ItemButton_OnEnter(itemButton)
+    end)
 
     -- In Edit Mode and/or "Bagshui Info" mode with Alt down, special behavior needs to be enabled:
     -- - Tooltips get truncated at the first blank line so there's more room for the Bagshui tooltip (if enabled).
@@ -1083,7 +1084,6 @@ Bagshui:AddComponent(function()
 
   --- OnLeave: Reset everything and hide the tooltip.
   function Inventory:ItemButton_OnLeave(itemButton)
-    itemButton = itemButton or _G.this
 
     -- Clear Edit Mode category highlighting.
     if self.editState.cursorItemType ~= BS_INVENTORY_OBJECT_TYPE.CATEGORY or self.editState.cursorItem == nil then
@@ -1093,11 +1093,11 @@ Bagshui:AddComponent(function()
       self.editState.highlightItem = nil
     end
 
+    -- Stop modifier-driven tooltip refreshes for this button.
+    self.ui:UnregisterModifierKeyHoverTarget(itemButton)
+
     -- Reset tracking properties.
     itemButton.bagshuiData.tooltipCooldownUpdate = nil
-    itemButton.bagshuiData.altKeyDown = nil
-    itemButton.bagshuiData.controlKeyDown = nil
-    itemButton.bagshuiData.shiftKeyDown = nil
 
     -- Record that the mouse has left this button (used by OnUpdate to determine
     -- whether the tooltip should be shown when the Edit Mode cursor puts down an item).
@@ -1134,42 +1134,45 @@ Bagshui:AddComponent(function()
   -- a second (if needed) so long as the mouse remains over the item slot. It also
   -- does a couple of other things.
   --
-  -- We need a fresh call to OnEnter when his itemButton owns the tooltip and one
+  -- We need a fresh call to OnEnter when this itemButton owns the tooltip and one
   -- of the following is true:
   --   - The `bagshuiData.tooltipCooldownUpdate` property exists and it's been more than 1 second since it was set.
-  --   - The `bagshuiData.<modifier>KeyDown` property doesn't match `Is<Modifier>KeyDown()`.
+  --   - Edit Mode needs to (re)display the tooltip for the button under the mouse.
+  --
+  -- Modifier-driven tooltip refreshes (Alt/Ctrl/Shift) are handled by the shared
+  -- modifier-key hover controller (see Components/Ui.ItemButton.lua), which calls
+  -- OnEnter directly when modifier key state changes while the mouse is over the
+  -- button, so they no longer need per-frame polling here.
+  ---@param itemButton table Item slot button widget.
   ---@param elapsed number? Time since the last OnUpdate call.
-  function Inventory:ItemButton_OnUpdate(elapsed)
+  function Inventory:ItemButton_OnUpdate(itemButton, elapsed)
     -- Refresh stock state every 60 seconds so badges fade in almost real-time.
     if
-      _G.this.bagshuiData
-      and _G.this.bagshuiData.item
-      and _G.this.bagshuiData.item.bagshuiStockState ~= BS_ITEM_STOCK_STATE.NO_CHANGE
-      and _G.GetTime() - _G.this.bagshuiData.lastStockStateRefresh > 60
-      and _G.this.bagshuiData.type == BS_UI_ITEM_BUTTON_TYPE.ITEM
+      itemButton.bagshuiData
+      and itemButton.bagshuiData.item
+      and itemButton.bagshuiData.item.bagshuiStockState ~= BS_ITEM_STOCK_STATE.NO_CHANGE
+      and _G.GetTime() - itemButton.bagshuiData.lastStockStateRefresh > 60
+      and itemButton.bagshuiData.type == BS_UI_ITEM_BUTTON_TYPE.ITEM
     then
-      self.ui:UpdateItemButtonStockState(_G.this)
-      self.ui:UpdateItemButtonColorsAndBadges(_G.this)
-      _G.this.bagshuiData.lastStockStateRefresh = _G.GetTime()
+      self.ui:UpdateItemButtonStockState(itemButton)
+      self.ui:UpdateItemButtonColorsAndBadges(itemButton)
+      itemButton.bagshuiData.lastStockStateRefresh = _G.GetTime()
     end
 
     -- Edit Mode help - make tooltips disappear as soon as the cursor holds an item.
     if
       self.editMode
-      and _G.this.bagshuiData.mouseIsOver
+      and itemButton.bagshuiData.mouseIsOver
       and self:EditModeCursorHasItem()
-      and _G.GameTooltip:IsOwned(_G.this)
+      and _G.GameTooltip:IsOwned(itemButton)
     then
-      self:ItemButton_OnLeave()
+      self:ItemButton_OnLeave(itemButton)
       return
     end
 
     -- Clear state tracking variables when the mouse isn't present.
-    if not _G.this.bagshuiData.mouseIsOver then
-      _G.this.bagshuiData.tooltipCooldownUpdate = nil
-      _G.this.bagshuiData.altKeyDown = nil
-      _G.this.bagshuiData.controlKeyDown = nil
-      _G.this.bagshuiData.shiftKeyDown = nil
+    if not itemButton.bagshuiData.mouseIsOver then
+      itemButton.bagshuiData.tooltipCooldownUpdate = nil
       return
     end
 
@@ -1177,37 +1180,26 @@ Bagshui:AddComponent(function()
     itemButton_OnUpdate_RefreshTooltip = false
 
     -- More Edit Mode help - display tooltips as soon as the cursor no longer holds an item.
-    if self.editMode and _G.this.bagshuiData.mouseIsOver and not _G.GameTooltip:IsOwned(_G.this) then
+    if self.editMode and itemButton.bagshuiData.mouseIsOver and not _G.GameTooltip:IsOwned(itemButton) then
       itemButton_OnUpdate_RefreshTooltip = true
     end
 
     -- Update cooldown info in tooltip.
-    if _G.this.bagshuiData.tooltipCooldownUpdate ~= nil then
+    if itemButton.bagshuiData.tooltipCooldownUpdate ~= nil then
       -- tooltipCooldownUpdate is initially set to 1 by OnEnter when there's a cooldown.
       -- Here we subtract the elapsed time in seconds, which will eventually go below 0
       -- so long as the property isn't wiped by moving the mouse off this item.
-      _G.this.bagshuiData.tooltipCooldownUpdate = _G.this.bagshuiData.tooltipCooldownUpdate - elapsed
+      itemButton.bagshuiData.tooltipCooldownUpdate = itemButton.bagshuiData.tooltipCooldownUpdate - elapsed
 
       -- Don't proceed until it's been more than 1 second.
-      if _G.this.bagshuiData.tooltipCooldownUpdate < 0 then
+      if itemButton.bagshuiData.tooltipCooldownUpdate < 0 then
         itemButton_OnUpdate_RefreshTooltip = true
       end
     end
 
-    -- Show/hide tooltip when modifier key state changes.
-    -- The 1/nil to true/false translation was done in our ItemButton_OnEnter
-    -- for reasons explained there, so we need to mirror it here.
-    if
-      (_G.this.bagshuiData.altKeyDown ~= nil and _G.this.bagshuiData.altKeyDown ~= (_G.IsAltKeyDown() == 1))
-      or (_G.this.bagshuiData.controlKeyDown ~= nil and _G.this.bagshuiData.controlKeyDown ~= (_G.IsControlKeyDown() == 1))
-      or (_G.this.bagshuiData.shiftKeyDown ~= nil and _G.this.bagshuiData.shiftKeyDown ~= (_G.IsShiftKeyDown() == 1))
-    then
-      itemButton_OnUpdate_RefreshTooltip = true
-    end
-
     -- Time to update the tooltip.
     if itemButton_OnUpdate_RefreshTooltip then
-      self:ItemButton_OnEnter(_G.this)
+      self:ItemButton_OnEnter(itemButton)
     end
   end
 
@@ -1215,7 +1207,6 @@ Bagshui:AddComponent(function()
   ---@param mouseButton string
   ---@param isDrag number|nil|boolean
   function Inventory:ItemButton_OnClick(mouseButton, isDrag, itemButton)
-    itemButton = itemButton or _G.this
 
     local buttonInfo = itemButton.bagshuiData
     local secureItemUseButton = buttonInfo.secureItemUseButton
@@ -1243,7 +1234,7 @@ Bagshui:AddComponent(function()
         if self.menus:IsMenuOpen() then
           Bagshui:CloseMenus()
           -- Need to update state so that things know the cursor is present.
-          self:ItemButton_OnEnter()
+          self:ItemButton_OnEnter(itemButton)
           return
         end
 
@@ -1299,7 +1290,7 @@ Bagshui:AddComponent(function()
           and item.emptySlot == 1
         then
           self.expandEmptySlotStacks = buttonInfo.isEmptySlotStack
-          self:ItemButton_OnLeave()
+          self:ItemButton_OnLeave(itemButton)
           self:ForceUpdateWindow()
           return
         end
@@ -1515,7 +1506,7 @@ _G.IsAddOnLoaded("Postal")
         -- Clear pending sale item (must happen before window update).
         self:ClearItemPendingSale(nil, true)
         -- Hide tooltip on click -- UpdateWindow() will call ItemSlotAndGroupMouseOverCheck(), which will show it again if needed.
-        self:ItemButton_OnLeave()
+        self:ItemButton_OnLeave(itemButton)
         -- Something was clicked, so make sure the window is up to date.
         self:ForceUpdateWindow()
       end

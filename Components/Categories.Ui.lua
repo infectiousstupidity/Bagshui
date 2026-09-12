@@ -73,9 +73,9 @@ Bagshui:AddComponent(function()
 
     --- Callback function for clicking an item in the player class menu.
     ---@param arg1 table Will always be classMenuArg1 as defined below.
-    local function classMenuFunc(arg1)
-      dropDownMenuSetSelectedValue(arg1.dropDown, _G.this.value)
-      arg1.editor:SetClass(_G.this.value)
+    local function classMenuFunc(menuButton, arg1)
+      dropDownMenuSetSelectedValue(arg1.dropDown, menuButton.value)
+      arg1.editor:SetClass(menuButton.value)
     end
 
     local classMenu = BsUtil.TableCopy(BsGameInfo.characterClassMenu)
@@ -422,8 +422,8 @@ Bagshui:AddComponent(function()
         end,
 
         -- Category Manager Add button shows a menu instead of just creating a new category.
-        managerAddButtonOnClick = function()
-          self.menus:OpenMenu("NewCategory", _G.this, nil, _G.this, 0, 0, "TOPLEFT", "BOTTOMLEFT")
+        managerAddButtonOnClick = function(button)
+          self.menus:OpenMenu("NewCategory", button, nil, button, 0, 0, "TOPLEFT", "BOTTOMLEFT")
         end,
 
         -- Basic Object Editor settings.
@@ -502,12 +502,12 @@ Bagshui:AddComponent(function()
             tooltipAnchorToPoint = "TOPLEFT",
             tooltipTitle = L.CategoryEditor_AddRuleFunction,
 
-            onClick = function()
+            onClick = function(button)
               categories.menus:OpenMenu(
                 menuToOpen, -- Menu name.
                 editor.labelWidgetPairs.rule.bagshuiData.widget.bagshuiData.editBox, -- callback arg1.
                 nil, -- callback arg2.
-                _G.this, -- anchorFrame.
+                button, -- anchorFrame.
                 0,
                 0, -- offsets.
                 "TOPRIGHT",
@@ -559,15 +559,15 @@ Bagshui:AddComponent(function()
         noTooltipDelay = true,
         noTooltipTextDelay = true,
 
-        onClick = function()
-          if _G.arg1 == "LeftButton" then
+        onClick = function(button, mouseButton)
+          if mouseButton == "LeftButton" then
             if editor.ruleInvalid then
               BsLogWindow:Open()
             else
               editor:UpdateState(true)
-              _G.this:GetScript("OnEnter")()
+              button:GetScript("OnEnter")(button)
             end
-          elseif _G.arg1 == "RightButton" then
+          elseif mouseButton == "RightButton" then
             BsLogWindow:Open()
           end
         end,
@@ -619,16 +619,16 @@ Bagshui:AddComponent(function()
       )
       -- Ensure text is visible when highlighted.
       local oldOnFocusGained = idEditBox:GetScript("OnEditFocusGained")
-      idEditBox:SetScript("OnEditFocusGained", function()
-        oldOnFocusGained()
-        _G.this:SetTextColor(1, 1, 1)
+      idEditBox:SetScript("OnEditFocusGained", function(editBox, ...)
+        oldOnFocusGained(editBox, ...)
+        editBox:SetTextColor(1, 1, 1)
       end)
       -- Clear highlight on focus lost.
       local oldOnFocusLost = idEditBox:GetScript("OnEditFocusLost")
-      idEditBox:SetScript("OnEditFocusLost", function()
-        oldOnFocusLost()
-        _G.this:HighlightText(0, 0)
-        _G.this:SetTextColor(0.35, 0.35, 0.35)
+      idEditBox:SetScript("OnEditFocusLost", function(editBox, ...)
+        oldOnFocusLost(editBox, ...)
+        editBox:HighlightText(0, 0)
+        editBox:SetTextColor(0.35, 0.35, 0.35)
       end)
 
       editor.idDisplay = ui:CreateLabeledWidget(

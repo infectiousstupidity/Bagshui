@@ -4,24 +4,24 @@ Bagshui:AddComponent(function()
   local Ui = Bagshui.prototypes.Ui
 
   --- Show full label in tooltip when the text is wider than the frame.
-  function Ui._Label_OnEnter()
-    local text = _G.this.bagshuiData.text
-    local tooltip = _G.this.bagshuiData.tooltip
-    if text:GetWidth() > _G.this:GetWidth() then
+  function Ui._Label_OnEnter(labelFrame)
+    local text = labelFrame.bagshuiData.text
+    local tooltip = labelFrame.bagshuiData.tooltip
+    if text:GetWidth() > labelFrame:GetWidth() then
       tooltip:ClearLines()
-      tooltip:SetOwner(_G.this, "ANCHOR_PRESERVE")
+      tooltip:SetOwner(labelFrame, "ANCHOR_PRESERVE")
       local tooltipOffset = -text:GetHeight() * tooltip:GetScale()
-      tooltip:SetPoint("BOTTOMLEFT", _G.this, "BOTTOMLEFT", tooltipOffset, tooltipOffset)
+      tooltip:SetPoint("BOTTOMLEFT", labelFrame, "BOTTOMLEFT", tooltipOffset, tooltipOffset)
       tooltip:AddLine(text:GetText(), HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b, true)
-      Bagshui:ShowTooltipAfterDelay(tooltip, _G.this, _G.this.bagshuiData.tooltipGroupFrame)
+      Bagshui:ShowTooltipAfterDelay(tooltip, labelFrame, labelFrame.bagshuiData.tooltipGroupFrame)
     end
   end
 
   --- Hide label tooltip.
-  function Ui._Label_OnLeave()
-    local tooltip = _G.this.bagshuiData.tooltip
-    if tooltip:IsOwned(_G.this) then
-      Bagshui:ShortenTooltipDelay(_G.this, true)
+  function Ui._Label_OnLeave(labelFrame)
+    local tooltip = labelFrame.bagshuiData.tooltip
+    if tooltip:IsOwned(labelFrame) then
+      Bagshui:ShortenTooltipDelay(labelFrame, true)
       tooltip:Hide()
     end
   end

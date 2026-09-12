@@ -259,11 +259,11 @@ Bagshui:AddComponent(function()
     element.bagshuiData._showTooltipAfterDelay_LastShown = shorten and _G.GetTime() or nil
   end
 
-  --- Hide GameTooltip and all Bagshui Info Tooltips if owned by `this` or `force == true`.
-  ---@param this table? Frame to check for ownership instead of the global `this`.
+  --- Hide GameTooltip and all Bagshui Info Tooltips if owned by `owner` or `force == true`.
+  ---@param owner table? Frame to check for ownership.
   ---@param force boolean? Hide tooltips without checking ownership.
-  function Bagshui:HideTooltips(this, force)
-    this = this or _G.this
+  function Bagshui:HideTooltips(owner, force)
+    local this = owner
     if force or _G.GameTooltip:IsOwned(this) then
       _G.GameTooltip:Hide()
     end
@@ -583,10 +583,21 @@ Bagshui:AddComponent(function()
       return ret
     end,
 
-    SetInboxItem = function(self, id, attachIndex)
-      local name, texture = _G.GetInboxItem(id)
+    SetInboxItem = function(self, id, attachIndex, ...)
+      local name, texture
+      if _G.ATTACHMENTS_MAX_RECEIVE then
+        -- WotLK supports multiple attachments and returns itemID before texture.
+        local itemId
+        name, itemId, texture = _G.GetInboxItem(id, attachIndex)
+        self.bagshuiData.lastItemString = BsCatalog:FindItemByNameAndTexture(name, texture, "itemString")
+        return self.bagshuiData.hooked.SetInboxItem(self, id, attachIndex, ...)
+      end
+
+      -- Vanilla has one attachment and returns texture second. Don't pass the
+      -- WotLK-only attachment parameter to the original Vanilla method.
+      name, texture = _G.GetInboxItem(id)
       self.bagshuiData.lastItemString = BsCatalog:FindItemByNameAndTexture(name, texture, "itemString")
-      return self.bagshuiData.hooked.SetInboxItem(self, id, attachIndex)
+      return self.bagshuiData.hooked.SetInboxItem(self, id)
     end,
 
     SetInventoryItem = function(self, unit, slotNum, nameOnly)
@@ -619,9 +630,20 @@ Bagshui:AddComponent(function()
       return self.bagshuiData.hooked.SetQuestLogItem(self, type, slot)
     end,
 
-    SetSendMailItem = function(self)
+    SetSendMailItem = function(self, attachIndex, ...)
       -- Vanilla doesn't have GetSendMailItemLink() so we need to figure it out.
-      local name, texture = _G.GetSendMailItem()
+      local name, texture
+      if _G.ATTACHMENTS_MAX_SEND then
+        -- WotLK supports multiple attachments and returns itemID before texture.
+        local itemId
+        name, itemId, texture = _G.GetSendMailItem(attachIndex)
+        self.bagshuiData.lastItemString = BsCatalog:FindItemByNameAndTexture(name, texture, "itemString")
+        return self.bagshuiData.hooked.SetSendMailItem(self, attachIndex, ...)
+      end
+
+      -- Vanilla has one attachment and returns texture second. Don't pass the
+      -- WotLK-only attachment parameter to the original Vanilla method.
+      name, texture = _G.GetSendMailItem()
       self.bagshuiData.lastItemString = BsCatalog:FindItemByNameAndTexture(name, texture, "itemString")
       return self.bagshuiData.hooked.SetSendMailItem(self)
     end,
@@ -678,20 +700,20 @@ Bagshui:AddComponent(function()
   -- Frame scripts that need to be hooked for each tooltip in order to show or hide the info tooltip.
   local hookTooltipScripts = {
 
-    OnUpdate = function()
-      Bagshui:ManageInfoTooltip(_G.this.bagshuiData.tooltip)
+    OnUpdate = function(hookFrame)
+      Bagshui:ManageInfoTooltip(hookFrame.bagshuiData.tooltip)
     end,
 
-    OnShow = function()
+    OnShow = function(hookFrame)
       -- Next-frame delay is necessary to prevent flickering tooltips with pfQuest's `/db scan`.
-      Bagshui:QueueClassCallback(Bagshui, Bagshui.ManageInfoTooltip, nil, nil, _G.this.bagshuiData.tooltip)
+      Bagshui:QueueClassCallback(Bagshui, Bagshui.ManageInfoTooltip, nil, nil, hookFrame.bagshuiData.tooltip)
     end,
 
-    OnHide = function()
+    OnHide = function(hookFrame)
       -- Do a check on the next frame to see if the info tooltip should be hidden.
       -- Delay is necessary due to Blizzard's bag slot buttons constantly hiding and
       -- re-showing GameTooltip OnUpdate.
-      Bagshui:QueueClassCallback(Bagshui, Bagshui.ManageInfoTooltip, nil, nil, _G.this.bagshuiData.tooltip)
+      Bagshui:QueueClassCallback(Bagshui, Bagshui.ManageInfoTooltip, nil, nil, hookFrame.bagshuiData.tooltip)
     end,
   }
 

@@ -42,6 +42,25 @@ Bagshui:AddComponent(function()
     -- Reference to self.inventory[bagNum][slotNum].
     local item
 
+    -- A cache request without known dirty containers is an explicit/unknown-state
+    -- request and must retain the safe full-scan behavior.
+    local fullCacheUpdate = (
+      self.initialInventoryUpdateNeeded
+      or self.forceCacheUpdate
+      or self.forceFullCacheUpdate
+      or BsUtil.TrueTableSize(self.pendingContainerChanges) > 0
+      or next(self.dirtyContainers) == nil
+    )
+
+    -- Reset consequence classification for this successful update attempt.
+    BsUtil.TableClear(self.cacheChangedItems)
+    BsUtil.TableClear(self.cacheVisualChangedItems)
+    BsUtil.TableClear(self.cacheChangedItemPreviousGroups)
+    BsUtil.TableClear(self.cacheChangedItemPreviousEmpty)
+    self.cacheCountChanged = false
+    self.cacheIdentityChanged = false
+    self.cacheBagStructureChanged = false
+
     -- The `*Changes` variables are used to figure out what needs to occur be once this function has finished.
 
     -- New items added, items removed, counts changed, etc. Most commonly true of the three `*Changes` variables.
@@ -74,10 +93,6 @@ Bagshui:AddComponent(function()
     -- (See Bagshui:PickupInventoryItem() for reasoning.)
     local shadowId, prevShadowId
 
-    -- Reset tracking tables.
-    BsUtil.TableClear(self.partialStacks)
-    BsUtil.TableClear(self.emptyGenericContainerSlots)
-
     -- Identify any container changes triggered by moving bags between slots.
     if Bagshui.pickedUpBagSlotNum and Bagshui.putDownBagSlotNum then
       -- Container changes are only applicable if it's one of our containers.
@@ -89,11 +104,19 @@ Bagshui:AddComponent(function()
       end
     end
     local hasPendingContainerChanges = BsUtil.TrueTableSize(self.pendingContainerChanges) > 0
+    -- A bag-equipment mapping change can affect two containers and must never be
+    -- handled as an ordinary one-container update.
+    if hasPendingContainerChanges then
+      fullCacheUpdate = true
+    end
 
     -- Loop through bags.
     -- Using _bagIndex instead of _ as the throwaway variable for this loop because
     -- _ is used heavily within, and overwriting the loop variable can cause issues.
     for _bagIndex, bagNum in ipairs(self.containerIds) do
+      -- Ordinary BAG_UPDATE passes only scan containers marked dirty. Full-cache
+      -- modes still scan every container.
+      if fullCacheUpdate or self.dirtyContainers[bagNum] then
       -- Initialize bag cache if needed.
       if self.inventory[bagNum] == nil then
         self.inventory[bagNum] = {}
@@ -173,9 +196,10 @@ bagInfo.numSlots > 0 and (not bagInfo.name or not bagInfo.type)
 
         -- Bag changes require a resort even if the window is visible.
         self.forceResort = true
+        self.cacheBagStructureChanged = true
       end
 
-      -- Reset tracking of filled slots.
+      -- Reset tracking of filled slots for containers that are actually scanned.
       self.containers[bagNum].slotsFilled = 0
 
       -- Make sure this bag has slots to process.
@@ -204,6 +228,9 @@ bagInfo.numSlots > 0 and (not bagInfo.name or not bagInfo.type)
           preCount = item.count or 0
           preLocked = item.locked
           preTooltip = item.tooltip
+          local preReadable = item.readable
+          local preGroupId = item.bagshuiGroupId
+          local preEmpty = item.emptySlot == 1
 
           -- Get current item information.
           nowItemLink = _G.GetContainerItemLink(bagNum, slotNum)
@@ -242,6 +269,7 @@ bagInfo.numSlots > 0 and (not bagInfo.name or not bagInfo.type)
             preItemLink ~= nowItemLink -- Item has changed.
             or item.bagNum == nil -- AddItemBagInfo() hasn't been called on this slot yet.
             or preLocked ~= nowLocked -- Locked/unlocked.
+            or preReadable ~= itemReadable -- Readable state changed.
             or preCount ~= nowCount -- Count has changed (changes to charges are checked separately).
             or preTooltip ~= item.tooltip
             or self.initialInventoryUpdateNeeded
@@ -249,6 +277,29 @@ bagInfo.numSlots > 0 and (not bagInfo.name or not bagInfo.type)
             or item._getItemInfoFailed -- Item was flagged as requiring a refresh.
             or self.forceFullCacheUpdate -- Update even items that may not appear to need it.
           then
+            -- Record the changed entry before refreshing it so later pipeline
+            -- stages can recategorize only this item and can identify its old group.
+            local identityChanged = (
+              preItemLink ~= nowItemLink
+              or item.bagNum == nil
+              or self.initialInventoryUpdateNeeded
+              or self.pendingContainerChanges[bagNum]
+              or item._getItemInfoFailed
+              or self.forceFullCacheUpdate
+            )
+            local countChanged = preCount ~= nowCount
+            if identityChanged or countChanged then
+              self.cacheChangedItems[item] = true
+              self.cacheChangedItemPreviousGroups[item] = preGroupId
+              self.cacheChangedItemPreviousEmpty[item] = preEmpty
+            end
+            if identityChanged then
+              self.cacheIdentityChanged = true
+            end
+            if countChanged then
+              self.cacheCountChanged = true
+            end
+
             -- Clear the failure flag (see explanation just below the call to ItemInfo:Get()).
             item._getItemInfoFailed = nil
 
@@ -304,11 +355,11 @@ bagInfo.numSlots > 0 and (not bagInfo.name or not bagInfo.type)
                 item._bagshuiPreventEmptySlotStack = true
               end
 
-              -- Add to empty slot tracking table.
-              -- See `Inventory:SwapBag()` comments regarding the exclusion of profession bags.
-              if bagInfo.genericType == BsGameInfo.itemSubclasses["Container"]["Bag"] then
-                table.insert(self.emptyGenericContainerSlots, item)
-              end
+            end
+
+            if preReadable ~= item.readable then
+              cosmeticChanges = true
+              self.cacheVisualChangedItems[item] = true
             end
 
             -- Check for stock state changes.
@@ -366,6 +417,12 @@ bagInfo.numSlots > 0 and (not bagInfo.name or not bagInfo.type)
           -- This check is here so that it works for both SuperWoW and native charges parsing.
           if item.charges ~= preCharges then
             majorChanges = true
+            self.cacheCountChanged = true
+            self.cacheChangedItems[item] = true
+            self.cacheChangedItemPreviousGroups[item] = self.cacheChangedItemPreviousGroups[item] or preGroupId
+            if self.cacheChangedItemPreviousEmpty[item] == nil then
+              self.cacheChangedItemPreviousEmpty[item] = preEmpty
+            end
           end
 
           -- Build "shadow" IDs for non-empty slots. (See comment above the declaration of shadowId for full explanation.)
@@ -410,16 +467,6 @@ bagInfo.numSlots > 0 and (not bagInfo.name or not bagInfo.type)
             item.bagshuiStockState = BS_ITEM_STOCK_STATE.NO_CHANGE
           end
 
-          -- Update partial stack tracking.
-          if item.count < (tonumber(item.maxStackCount) or 0) then
-            if self.partialStacks[item.id] == nil then
-              self.partialStacks[item.id] = 1
-            else
-              self.partialStacks[item.id] = self.partialStacks[item.id] + 1
-              self.multiplePartialStacks = true
-            end
-          end
-
           -- Item isn't assigned to a group, so resort is required.
           if item.bagshuiGroupId == "" then
             majorChanges = true
@@ -428,6 +475,7 @@ bagInfo.numSlots > 0 and (not bagInfo.name or not bagInfo.type)
           -- Locked status has changed, so an update is a good idea.
           if item.locked ~= preLocked then
             cosmeticChanges = true
+            self.cacheVisualChangedItems[item] = true
           end
 
           -- Clean up any vestigial properties at startup.
@@ -447,13 +495,6 @@ bagInfo.numSlots > 0 and (not bagInfo.name or not bagInfo.type)
             self.shadowStockState[shadowId] = item.bagshuiStockState
           end
 
-          -- Update item counts for use in stock state rectification.
-          if item.itemString then
-            if not self.postUpdateItemCounts[item.itemString] then
-              self.postUpdateItemCounts[item.itemString] = 0
-            end
-            self.postUpdateItemCounts[item.itemString] = self.postUpdateItemCounts[item.itemString] + item.count
-          end
         end -- Item slot loop within each bag.
       else
         -- There are no slots, so wipe the cache for this bag.
@@ -462,8 +503,40 @@ bagInfo.numSlots > 0 and (not bagInfo.name or not bagInfo.type)
           majorChanges = true
         end
         BsUtil.TableClear(self.inventory[bagNum])
+        self.cacheBagStructureChanged = true
       end
+      end -- Dirty/full container check.
     end -- Bag [container] loop.
+
+    -- Rebuild inventory-wide derived tracking from the complete cache. This is
+    -- intentionally separate from the scan so an unscanned container continues
+    -- contributing its empty slots, partial stacks, and stock totals.
+    BsUtil.TableClear(self.partialStacks)
+    BsUtil.TableClear(self.emptyGenericContainerSlots)
+    BsUtil.TableClear(self.postUpdateItemCounts)
+    self.multiplePartialStacks = false
+    for _, bagNum in ipairs(self.containerIds) do
+      local containerInfo = self.containers[bagNum]
+      local container = self.inventory[bagNum]
+      if containerInfo and container then
+        for slotNum = 1, (containerInfo.numSlots or 0) do
+          item = container[slotNum]
+          if item then
+            if item.emptySlot == 1 and containerInfo.genericType == BsGameInfo.itemSubclasses["Container"]["Bag"] then
+              table.insert(self.emptyGenericContainerSlots, item)
+            elseif item.itemString then
+              if item.count < (tonumber(item.maxStackCount) or 0) then
+                self.partialStacks[item.id] = (self.partialStacks[item.id] or 0) + 1
+                if self.partialStacks[item.id] > 1 then
+                  self.multiplePartialStacks = true
+                end
+              end
+              self.postUpdateItemCounts[item.itemString] = (self.postUpdateItemCounts[item.itemString] or 0) + item.count
+            end
+          end
+        end
+      end
+    end
 
     -- Post-update stock state rectification.
     -- Only allow changes to stock state when they make sense at an inventory level,
@@ -513,14 +586,24 @@ item._proposedStockState ~= BS_ITEM_STOCK_STATE.DOWN
     -- Store resort/update status for use by Update() and friends in Inventory.Layout.lua.
     if majorChanges then
       self.resortNeeded = true
-      self.windowUpdateNeeded = true
     elseif minorChanges then
       self.resortNeeded = self.resortNeeded or false
       self.windowUpdateNeeded = true
-    elseif cosmeticChanges then
+    end
+    self.cacheChanged = (
+      majorChanges
+      or cosmeticChanges
+      or minorChanges
+      or self.cacheIdentityChanged
+      or self.cacheCountChanged
+      or self.cacheBagStructureChanged
+    )
+
+    -- Bag structure changes invalidate every category/group and window dimension.
+    if self.cacheBagStructureChanged then
+      self.resortNeeded = true
       self.windowUpdateNeeded = true
     end
-    self.cacheChanged = (majorChanges or cosmeticChanges or minorChanges)
 
     -- Make sure we don't do a full cache rebuild again.
     self.initialInventoryUpdateNeeded = false
@@ -532,6 +615,9 @@ item._proposedStockState ~= BS_ITEM_STOCK_STATE.DOWN
     self.cacheUpdateNeeded = false
     self.forceCacheUpdate = false
     self.forceFullCacheUpdate = false
+    -- Dirty flags are only discarded after the entire pass succeeds. Any early
+    -- return above leaves them intact for the queued recovery pass.
+    BsUtil.TableClear(self.dirtyContainers)
 
     -- Reset triggers for container-change based stock state restoration.
     -- (See Bagshui:PickupInventoryItem() for reasoning.)
@@ -542,7 +628,7 @@ item._proposedStockState ~= BS_ITEM_STOCK_STATE.DOWN
     end
 
     -- Raise change event.
-    if majorChanges or minorChanges or cosmeticChanges then
+    if self.cacheChanged then
       Bagshui:RaiseEvent("BAGSHUI_INVENTORY_CACHE_UPDATE")
     end
   end

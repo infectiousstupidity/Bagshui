@@ -467,9 +467,9 @@ Bagshui:AddComponent(function()
             and settingInfo.choicesCheckedFunc(settingName, settingsStorage, menuItem.value)
           or tostring(menuItem.value) == tostring(currentSettingValue)
         menuItem.keepShownOnClick = true
-        menuItem.func = function()
+        menuItem.func = function(menuButton)
           if not self:ResetSettingOnModifierKeys(menuItem.arg1, nil, true) then
-            settingsStorage[settingName] = _G.this.value
+            settingsStorage[settingName] = menuButton.value
             settingUpdateFunction()
             self.menus:Refresh()
             self.menus:Refresh(menuLevel, true)

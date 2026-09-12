@@ -75,7 +75,7 @@ Bagshui:AddComponent(function()
     -- tooltip and change to the buy cursor.
     local oldOnEnter = bagSlotButton:GetScript("OnEnter")
     bagSlotButton:SetScript("OnEnter", function(bagButton, motion)
-      local this = bagButton or _G.this
+      local this = bagButton
       if oldOnEnter then
         oldOnEnter(this, motion)
       end
@@ -99,7 +99,7 @@ Bagshui:AddComponent(function()
     -- OnClick, make the purchase if it's the next purchasable slot.
     local oldOnClick = bagSlotButton:GetScript("OnClick")
     bagSlotButton:SetScript("OnClick", function(bagButton, mouseButton)
-      local this = bagButton or _G.this
+      local this = bagButton
       if not self.online then
         return
       end
@@ -213,11 +213,12 @@ Bagshui:AddComponent(function()
   end
 
   --- Bank needs special logic for open.
-  function Bank:Open()
+  ---@param triggerEvent string? Event that requested the window open.
+  function Bank:Open(triggerEvent)
     -- Determine whether we're at the bank.
     -- `self.online` will be updated in `Bank:Update()`.
     self.atBank = (
-      _G.event == "BANKFRAME_OPENED"
+      triggerEvent == "BANKFRAME_OPENED"
       or (self.settings.replaceBank == false and self.ui:IsFrameVisible(self.blizzBankFrame))
     )
     self.windowUpdateNeeded = true
@@ -225,31 +226,32 @@ Bagshui:AddComponent(function()
 
     -- Don't respond to open event when we're not hooking the Bank,
     -- but do update online state via `Bank:Update()`.
-    if _G.event == "BANKFRAME_OPENED" and self.settings.replaceBank == false then
+    if triggerEvent == "BANKFRAME_OPENED" and self.settings.replaceBank == false then
       return
     end
 
-    self._super.Open(self)
+    self._super.Open(self, triggerEvent)
   end
 
   --- Bank needs special logic for close.
-  function Bank:Close()
+  ---@param triggerEvent string? Event that requested the window close.
+  function Bank:Close(triggerEvent)
     -- Determine whether we're still at the bank.
     -- Closing the bank can never mean we're at the bank, so only
     -- change `atBank` if it's currently true.
     -- `self.online` will be updated in `Bank:Update()`.
     if self.atBank then
-      self.atBank = (_G.event ~= "BANKFRAME_CLOSED")
+      self.atBank = (triggerEvent ~= "BANKFRAME_CLOSED")
     end
     self.windowUpdateNeeded = true
     self:Update()
 
     -- Don't respond to close event when we're not hooking the Bank.
-    if _G.event == "BANKFRAME_CLOSED" and self.settings.replaceBank == false then
+    if triggerEvent == "BANKFRAME_CLOSED" and self.settings.replaceBank == false then
       return
     end
 
-    self._super.Close(self)
+    self._super.Close(self, triggerEvent)
   end
 
   --- Need to overload the OnHide script so that we can ensure the BANKFRAME_OPENED

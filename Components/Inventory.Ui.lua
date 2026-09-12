@@ -42,32 +42,32 @@ Bagshui:AddComponent(function()
     -- Add scripts.
 
     uiFrame.bagshuiData.lastDirtyCheck = _G.GetTime()
-    uiFrame:SetScript("OnUpdate", function()
+    uiFrame:SetScript("OnUpdate", function(frame)
       -- Mark this window as dirty if any "child" windows are open.
-      if _G.GetTime() - _G.this.bagshuiData.lastDirtyCheck > 0.075 then
-        _G.this.bagshuiData.dirty = Bagshui:ChildWindowsVisible()
-        _G.this.bagshuiData.lastDirtyCheck = _G.GetTime()
+      if _G.GetTime() - frame.bagshuiData.lastDirtyCheck > 0.075 then
+        frame.bagshuiData.dirty = Bagshui:ChildWindowsVisible()
+        frame.bagshuiData.lastDirtyCheck = _G.GetTime()
       end
     end)
 
     local oldOnShow = uiFrame:GetScript("OnShow")
-    uiFrame:SetScript("OnShow", function()
+    uiFrame:SetScript("OnShow", function(frame, ...)
       if self.suppressUiFrameScripts then
         return
       end
       self:UiFrame_OnShow()
       if oldOnShow then
-        oldOnShow()
+        oldOnShow(frame, ...)
       end
     end)
     local oldOnHide = uiFrame:GetScript("OnHide")
-    uiFrame:SetScript("OnHide", function()
+    uiFrame:SetScript("OnHide", function(frame, ...)
       if self.suppressUiFrameScripts then
         return
       end
       self:UiFrame_OnHide()
       if oldOnHide then
-        oldOnHide()
+        oldOnHide(frame, ...)
       end
     end)
 
@@ -75,13 +75,13 @@ Bagshui:AddComponent(function()
       self.clickedOnce = nil
     end
 
-    uiFrame:SetScript("OnMouseDown", function()
+    uiFrame:SetScript("OnMouseDown", function(frame, mouseButton)
       -- Clear a pending item sale.
       if self.itemPendingSale then
         self:ClearItemPendingSale()
       end
 
-      if _G.arg1 == "LeftButton" then
+      if mouseButton == "LeftButton" then
         -- Close non-Settings menus on left mouse down (Settings is closed OnMouseUp).
         if not self.menus:IsMenuOpen("Settings") then
           Bagshui:CloseMenus()
@@ -139,9 +139,9 @@ Bagshui:AddComponent(function()
         self.lastMouseDown = _G.GetTime()
         self.clickedOnce = true
         Bagshui:QueueEvent(resetClick, 0.25)
-      elseif _G.arg1 == "RightButton" then
+      elseif mouseButton == "RightButton" then
         -- Show right-click menu.
-        Bagshui:HideTooltips()
+        Bagshui:HideTooltips(frame)
         self.ui.tooltips.mini:Hide()
         self.menus:OpenMenu("Main", nil, nil, "cursor")
       end
@@ -177,10 +177,10 @@ Bagshui:AddComponent(function()
       _G.UIDropDownMenu_StopCounting(_G.DropDownList1)
     end)
 
-    uiFrame:SetScript("OnLeave", function()
+    uiFrame:SetScript("OnLeave", function(frame)
       -- Edit Mode actions are Inventory class instance-specific, so it makes sense to
       -- turn the cursor back to normal when it leaves the window.
-      if not _G.MouseIsOver(_G.this) then
+      if not _G.MouseIsOver(frame) then
         self:HideEditModeCursor()
       end
     end)
@@ -238,19 +238,18 @@ Bagshui:AddComponent(function()
     --- Return `true` if the current button does *not* have an associated spell
     --- in its `bagshuiData.spellName` property.
     ---@return boolean
-    local function inventory_SpellButton_NoSpell()
+    local function inventory_SpellButton_NoSpell(button)
       return (
-        not _G.this.bagshuiData
-        or not _G.this.bagshuiData.spellName
-        or not BsCharacter.spellNamesToIds[_G.this.bagshuiData.spellName]
+        not button.bagshuiData
+        or not button.bagshuiData.spellName
+        or not BsCharacter.spellNamesToIds[button.bagshuiData.spellName]
       )
     end
 
     --- Cast the configured spell on a button.
     ---@param button table?
     local function inventory_SpellButton_OnClick(button)
-      button = button or _G.this
-      if inventory_SpellButton_NoSpell() then
+      if inventory_SpellButton_NoSpell(button) then
         return
       end
 
@@ -262,19 +261,19 @@ Bagshui:AddComponent(function()
     end
 
     --- Show the spell tooltip associated with a button.
-    local function inventory_SpellButton_OnEnter()
-      if inventory_SpellButton_NoSpell() then
+    local function inventory_SpellButton_OnEnter(button)
+      if inventory_SpellButton_NoSpell(button) then
         return
       end
-      _G.GameTooltip:SetOwner(_G.this, "ANCHOR_" .. BsUtil.FlipAnchorPoint(self.settings.windowAnchorXPoint))
-      _G.GameTooltip:SetSpell(BsCharacter.spellNamesToIds[_G.this.bagshuiData.spellName], _G.BOOKTYPE_SPELL)
+      _G.GameTooltip:SetOwner(button, "ANCHOR_" .. BsUtil.FlipAnchorPoint(self.settings.windowAnchorXPoint))
+      _G.GameTooltip:SetSpell(BsCharacter.spellNamesToIds[button.bagshuiData.spellName], _G.BOOKTYPE_SPELL)
       _G.GameTooltip:Show()
       return false
     end
 
     --- Hide the tooltip.
-    local function inventory_SpellButton_OnLeave()
-      if _G.GameTooltip:IsOwned(_G.this) then
+    local function inventory_SpellButton_OnLeave(button)
+      if _G.GameTooltip:IsOwned(button) then
         _G.GameTooltip:Hide()
       end
       return false
@@ -284,15 +283,15 @@ Bagshui:AddComponent(function()
     local spellButton_OnUpdate_cooldownStart, spellButton_OnUpdate_cooldownDuration, spellButton_OnUpdate_cooldownEnable
 
     --- Manage the spell cooldown.
-    local function inventory_SpellButton_OnUpdate()
-      if inventory_SpellButton_NoSpell() then
+    local function inventory_SpellButton_OnUpdate(button)
+      if inventory_SpellButton_NoSpell(button) then
         return
       end
       spellButton_OnUpdate_cooldownStart, spellButton_OnUpdate_cooldownDuration, spellButton_OnUpdate_cooldownEnable =
-        _G.GetSpellCooldown(BsCharacter.spellNamesToIds[_G.this.bagshuiData.spellName], _G.BOOKTYPE_SPELL)
+        _G.GetSpellCooldown(BsCharacter.spellNamesToIds[button.bagshuiData.spellName], _G.BOOKTYPE_SPELL)
       if spellButton_OnUpdate_cooldownEnable and (spellButton_OnUpdate_cooldownDuration or 0) > 0 then
         self.ui:SetIconButtonCooldown(
-          _G.this,
+          button,
           spellButton_OnUpdate_cooldownStart,
           spellButton_OnUpdate_cooldownDuration,
           spellButton_OnUpdate_cooldownEnable
@@ -310,25 +309,25 @@ Bagshui:AddComponent(function()
       width = 16,
       height = 16,
       xOffset = 5,
-      onClick = function()
-        Bagshui:HideTooltips()
+      onClick = function(button)
+        Bagshui:HideTooltips(button)
         self.ui.tooltips.mini:Hide()
-        self.menus:OpenMenu("Main", nil, nil, _G.this, -5, -5)
+        self.menus:OpenMenu("Main", nil, nil, button, -5, -5)
       end,
-      onEnter = function()
-        _G.this.bagshuiData.overrideTooltip = (
+      onEnter = function(button)
+        button.bagshuiData.overrideTooltip = (
           (not self.settings.showFooter and not self.alwaysShowUsageSummary)
           or (self.settings.bagUsageDisplay ~= BS_INVENTORY_BAG_USAGE_DISPLAY.ALWAYS and not self.settings.showBagBar)
         )
 
-        if _G.this.bagshuiData.overrideTooltip then
-          self:ShowUsageSummary(_G.this, false)
+        if button.bagshuiData.overrideTooltip then
+          self:ShowUsageSummary(button, false)
           return false
         end
       end,
-      onLeave = function()
-        if _G.this.bagshuiData.overrideTooltip then
-          self:HideUsageSummary(_G.this, false)
+      onLeave = function(button)
+        if button.bagshuiData.overrideTooltip then
+          self:HideUsageSummary(button, false)
           return false
         end
       end,
@@ -493,8 +492,8 @@ Bagshui:AddComponent(function()
       18, -- Height
 
       -- OnTextChanged - trigger search.
-      function()
-        self.searchText = _G.this.bagshuiData.searchText -- Set by autogenerated function in CreateSearchBox().
+      function(searchBox)
+        self.searchText = searchBox.bagshuiData.searchText -- Set by autogenerated function in CreateSearchBox().
         self:UpdateItemSlotColors()
         if self.dockedInventory then
           self.dockedInventory:UpdateItemSlotColors()
@@ -513,8 +512,8 @@ Bagshui:AddComponent(function()
       end,
 
       -- OnIconClick -- open Catalog on right-click.
-      function()
-        if self.searchText and (_G.arg1 == "RightButton" or (_G.arg1 == "LeftButton" and _G.IsAltKeyDown())) then
+      function(_, mouseButton)
+        if self.searchText and (mouseButton == "RightButton" or (mouseButton == "LeftButton" and _G.IsAltKeyDown())) then
           self:SearchCatalog()
         end
       end
@@ -526,8 +525,8 @@ Bagshui:AddComponent(function()
 
     -- Hide search box when empty.
     local oldOnEditFocusLost = frames.searchBox:GetScript("OnEditFocusLost")
-    frames.searchBox:SetScript("OnEditFocusLost", function()
-      oldOnEditFocusLost()
+    frames.searchBox:SetScript("OnEditFocusLost", function(searchBox, ...)
+      oldOnEditFocusLost(searchBox, ...)
       if not self.searchText then
         _G.PlaySound("igMainMenuOptionCheckBoxOff")
         frames.searchBox:Hide()
@@ -616,11 +615,11 @@ Bagshui:AddComponent(function()
 
     -- Shared functions for utilization displays.
 
-    local function usageSummary_OnEnter()
-      self:ShowUsageSummary(_G.this, true)
+    local function usageSummary_OnEnter(summaryFrame)
+      self:ShowUsageSummary(summaryFrame, true)
     end
-    local function usageSummary_OnLeave()
-      self:HideUsageSummary(_G.this, true)
+    local function usageSummary_OnLeave(summaryFrame)
+      self:HideUsageSummary(summaryFrame, true)
     end
 
     --- Create a space utilization display.
@@ -739,10 +738,10 @@ Bagshui:AddComponent(function()
     end)
 
     local function moneyFrameOnEnter()
-      frames.money:GetScript("OnEnter")()
+      frames.money:GetScript("OnEnter")(frames.money)
     end
     local function moneyFrameOnLeave()
-      frames.money:GetScript("OnLeave")()
+      frames.money:GetScript("OnLeave")(frames.money)
     end
 
     for _, child in ipairs({ frames.money:GetChildren() }) do
@@ -785,18 +784,18 @@ Bagshui:AddComponent(function()
         end
       end,
       texture = "Hearthstone",
-      onEnter = function()
+      onEnter = function(button)
         if self.hearthstoneItemRef then
-          _G.this.bagshuiData.bagNum = self.hearthstoneItemRef.bagNum
-          _G.this.bagshuiData.slotNum = self.hearthstoneItemRef.slotNum
-          self:ItemButton_OnEnter()
+          button.bagshuiData.bagNum = self.hearthstoneItemRef.bagNum
+          button.bagshuiData.slotNum = self.hearthstoneItemRef.slotNum
+          self:ItemButton_OnEnter(button)
         end
       end,
-      onLeave = function()
-        self:ItemButton_OnLeave()
+      onLeave = function(button)
+        self:ItemButton_OnLeave(button)
       end,
-      onUpdate = function()
-        self:ItemButton_OnUpdate(_G.arg1)
+      onUpdate = function(button, elapsed)
+        self:ItemButton_OnUpdate(button, elapsed)
       end,
     })
     self:ConfigureSecureItemUseButton(buttons.toolbar.hearthstone, nil, nil, "LeftButton", true)
@@ -846,12 +845,12 @@ Bagshui:AddComponent(function()
       onClick = function(button)
         self:RefreshSecureItemUseButtons()
       end,
-      onEnter = function()
+      onEnter = function(button)
         -- Actual work will be handled in OnUpdate.
-        _G.this.bagshuiData.mouseIsOver = true
+        button.bagshuiData.mouseIsOver = true
       end,
-      onLeave = function()
-        _G.this.bagshuiData.mouseIsOver = false
+      onLeave = function(button)
+        button.bagshuiData.mouseIsOver = false
         self.highlightItemsInContainerId = nil
         self.highlightItemsContainerSlot = nil
         self:UpdateItemSlotColors()
@@ -862,19 +861,19 @@ Bagshui:AddComponent(function()
         end
         self.lastHighlightedOpenableButton = nil
       end,
-      onUpdate = function()
-        if not _G.this.bagshuiData.mouseIsOver then
+      onUpdate = function(button)
+        if not button.bagshuiData.mouseIsOver then
           -- We need to essentially fake an OnLeave event when the
           -- last container is opened because the normal OnLeave
           -- won't fire, which leads to the light highlighted item
           -- slot button thinking it's still moused over.
-          if _G.this.bagshuiData.wasUpdated then
-            _G.this.bagshuiData.wasUpdated = false
+          if button.bagshuiData.wasUpdated then
+            button.bagshuiData.wasUpdated = false
           end
           return
         end
         self:HighlightNextOpenable()
-        _G.this.bagshuiData.wasUpdated = true
+        button.bagshuiData.wasUpdated = true
       end,
     })
     self:ConfigureSecureItemUseButton(buttons.toolbar.clam, nil, nil, "LeftButton", true)
@@ -1065,20 +1064,20 @@ Bagshui:AddComponent(function()
         getMenuValueProp = function()
           return self.menus.menuList.Character.levels[1]
         end,
-        onClickBeforeCloseMenusAndClearFocuses = function()
+        onClickBeforeCloseMenusAndClearFocuses = function(button)
           -- Whether the character menu was open before the default button OnClick closed it.
-          _G.this.bagshuiData.characterMenuWasOpen = self.menus:IsMenuOpen("Character")
+          button.bagshuiData.characterMenuWasOpen = self.menus:IsMenuOpen("Character")
         end,
-        onClick = function()
-          if _G.this.bagshuiData.characterMenuWasOpen then
+        onClick = function(button)
+          if button.bagshuiData.characterMenuWasOpen then
             Bagshui:CloseMenus()
           else
             -- Open the menu with a sensible alignment based on window anchoring.
             self.menus:OpenMenu(
               "Character", -- menuType
-              _G.this, -- arg1
+              button, -- arg1
               nil, -- arg2
-              _G.this, -- anchorFrame
+              button, -- anchorFrame
               (5 * (self.settings.windowAnchorXPoint == "LEFT" and -1 or 1)), -- xOffset
               -5, -- yOffset
               "TOP" .. self.settings.windowAnchorXPoint, -- anchorPoint
@@ -1220,15 +1219,14 @@ Bagshui:AddComponent(function()
       return
     end
 
-    owner = owner or _G.this
     tooltip = tooltip or _G.GameTooltip
 
-    _G.this.bagshuiData.mouseIsOver = true
+    owner.bagshuiData.mouseIsOver = true
 
     -- Trigger bag bar OnEnter to avoid flickering.
     if attachedToBagBar then
       if self.ui.frames.bagBar:IsVisible() then
-        self.ui.frames.bagBar:GetScript("OnEnter")()
+        self.ui.frames.bagBar:GetScript("OnEnter")(self.ui.frames.bagBar)
       end
     end
 
@@ -1311,7 +1309,6 @@ Bagshui:AddComponent(function()
   ---@param attachedToBagBar boolean? When `true`, call the bag bar's OnLeave.
   ---@param tooltip table? Tooltip to use instead of GameTooltip.
   function Inventory:HideUsageSummary(owner, attachedToBagBar, tooltip)
-    owner = owner or _G.this
     tooltip = tooltip or _G.GameTooltip
 
     owner.bagshuiData.mouseIsOver = false
@@ -1323,7 +1320,7 @@ Bagshui:AddComponent(function()
 
     -- Decide whether to keep displaying slot available/used counts.
     if attachedToBagBar and self.ui.frames.bagBar:IsVisible() then
-      self.ui.frames.bagBar:GetScript("OnLeave")()
+      self.ui.frames.bagBar:GetScript("OnLeave")(self.ui.frames.bagBar)
     end
   end
 
@@ -1422,17 +1419,18 @@ Bagshui:AddComponent(function()
   end
 
   --- Display the window.
-  function Inventory:Open()
+  ---@param triggerEvent string? Event that requested the window open.
+  function Inventory:Open(triggerEvent)
     local frameWasVisible = self.uiFrame:IsVisible()
     if not frameWasVisible then
       -- Set to `EVENT_PREFIX_` when the event ends in `_OPENED`.
       -- This will allow for matching against the corresponding
       -- `EVENT_PREFIX_CLOSED`.
-      self.lastOpenEventTrigger = _G.event
-          and ((string.find(_G.event, "_OPENED$")) and (string.gsub(_G.event, "OPENED$", "")) or (string.find(
-            _G.event,
+      self.lastOpenEventTrigger = triggerEvent
+          and ((string.find(triggerEvent, "_OPENED$")) and (string.gsub(triggerEvent, "OPENED$", "")) or (string.find(
+            triggerEvent,
             "_SHOW$"
-          )) and (string.gsub(_G.event, "SHOW$", "")))
+          )) and (string.gsub(triggerEvent, "SHOW$", "")))
         or nil
     end
 
@@ -1468,14 +1466,15 @@ Bagshui:AddComponent(function()
   end
 
   --- Hide the window.
-  function Inventory:Close()
+  ---@param triggerEvent string? Event that requested the window close.
+  function Inventory:Close(triggerEvent)
     if self.uiFrame:IsVisible() then
       -- Don't close if the close request came from an event trigger but
       -- the window not opened by the corresponding event.
       if
-        type(_G.event) == "string"
-        and (string.find(_G.event, "_CLOSED$"))
-        and (self.lastOpenEventTrigger == nil or (not string.find(_G.event, "^" .. self.lastOpenEventTrigger)))
+        type(triggerEvent) == "string"
+        and (string.find(triggerEvent, "_CLOSED$"))
+        and (self.lastOpenEventTrigger == nil or (not string.find(triggerEvent, "^" .. self.lastOpenEventTrigger)))
       then
         return
       end

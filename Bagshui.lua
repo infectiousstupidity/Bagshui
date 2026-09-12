@@ -889,9 +889,8 @@ function Bagshui:Init()
   self.eventFrame.bagshuiData = {
     registeredEvents = {},
   }
-  self.eventFrame:SetScript("OnEvent", function()
-    -- Vanilla WoW "passes" event parameters via global variables.
-    self:OnEvent(_G.event, _G.arg1, _G.arg2, _G.arg3, _G.arg4)
+  self.eventFrame:SetScript("OnEvent", function(_, event, ...)
+    self:OnEvent(event, ...)
   end)
   self.eventFrame:SetScript("OnUpdate", function()
     -- Check the event queue on every frame.
@@ -1070,7 +1069,8 @@ end
 ---@param arg2 any? Second argument, if any.
 ---@param arg3 any? Third argument, if any.
 ---@param arg4 any? Fourth argument, if any.
-function Bagshui:OnEvent(event, arg1, arg2, arg3, arg4)
+---@param ... any Additional event arguments, if any.
+function Bagshui:OnEvent(event, arg1, arg2, arg3, arg4, ...)
   -- Bagshui:PrintDebug("Bagshui event " .. event .. " // " .. tostring(arg1) .. " // " .. tostring(arg2) .. " // " .. tostring(arg3) .. " // " .. tostring(arg4))
 
   local downstreamEvent = event --[[@as string|nil]]
@@ -1113,7 +1113,7 @@ function Bagshui:OnEvent(event, arg1, arg2, arg3, arg4)
   if downstreamEvent then
     for consumer, events in pairs(self.eventConsumers) do
       if events[event] then
-        consumer[self.eventConsumers[consumer]._eventFunctionName](consumer, downstreamEvent, arg1, arg2, arg3, arg4)
+        consumer[self.eventConsumers[consumer]._eventFunctionName](consumer, downstreamEvent, arg1, arg2, arg3, arg4, ...)
       end
     end
   end

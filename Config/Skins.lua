@@ -299,11 +299,11 @@ Bagshui:LoadComponent(function()
             buttonOrMenuItem.texture:ClearAllPoints()
             buttonOrMenuItem.texture:SetAllPoints(buttonOrMenuItem)
             buttonOrMenuItem.texture:SetVertexColor(1, 0.25, 0.25, 1)
-            buttonOrMenuItem:SetScript("OnEnter", function()
-              _G.this.backdrop:SetBackdropBorderColor(1, 0.25, 0.25, 1)
+            buttonOrMenuItem:SetScript("OnEnter", function(button)
+              button.backdrop:SetBackdropBorderColor(1, 0.25, 0.25, 1)
             end)
-            buttonOrMenuItem:SetScript("OnLeave", function()
-              pfUI.api.CreateBackdrop(_G.this)
+            buttonOrMenuItem:SetScript("OnLeave", function(button)
+              pfUI.api.CreateBackdrop(button)
             end)
           else
             -- Menu item.
@@ -341,9 +341,9 @@ Bagshui:LoadComponent(function()
           local thumbTexture = _G[scrollbar:GetName() .. "ThumbTexture"]
           local oldOnUpdate = scrollbar:GetScript("OnUpdate")
           local lastUpdate = _G.GetTime()
-          scrollbar:SetScript("OnUpdate", function()
+          scrollbar:SetScript("OnUpdate", function(frame, elapsed)
             if oldOnUpdate then
-              oldOnUpdate()
+              oldOnUpdate(frame, elapsed)
             end
             if _G.GetTime() - lastUpdate > 0.025 then
               if thumbTexture:IsShown() then

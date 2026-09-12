@@ -241,10 +241,9 @@ Bagshui:AddComponent(function()
             dialog.uiFrame,
             "UIOptionsCheckButtonTemplate",
             L.ShareManager_ExportEncodeCheckbox,
-            function(this)
-              this = this or _G.this
+            function(checkbox)
               self:ImportExportAction(dialog.uiFrame, function()
-                dialog:SetText(BsUtil.Export(dialog.data.toExport, (not this:GetChecked())))
+                dialog:SetText(BsUtil.Export(dialog.data.toExport, (not checkbox:GetChecked())))
               end)
             end
           )
@@ -274,18 +273,6 @@ Bagshui:AddComponent(function()
             dialog.uiFrame:GetWidth() - BsSkin.windowPadding * 2 - checkboxWidth
           )
 
-          dialog.uiFrame.bagshuiData.encodeCheckbox = ui:CreateCheckbox(
-            "Encode",
-            dialog.uiFrame,
-            "UIOptionsCheckButtonTemplate",
-            L.ShareManager_ExportEncodeCheckbox,
-            function(this)
-              this = this or _G.this
-              self:ImportExportAction(dialog.uiFrame, function()
-                dialog:SetText(BsUtil.Export(dialog.data.toExport, (not this:GetChecked())))
-              end)
-            end
-          )
           -- Insert checkbox above buttons.
           dialog.uiFrame.bagshuiData.encodeCheckbox:SetPoint(
             "BOTTOMLEFT",
@@ -405,9 +392,12 @@ Bagshui:AddComponent(function()
   --- Import data provided by the user.
   ---@param text string Serialized and probably compressed and base64 encoded Bagshui export data.
   function Share:ProcessImport(text)
-    local imported = BsUtil.Import(text)
+    local imported, importError = BsUtil.Import(text)
 
-    if type(imported) ~= "table" or not imported.bagshuiExportFormat then
+    if type(imported) ~= "table" or type(imported.bagshuiExportFormat) ~= "number" then
+      if importError then
+        Bagshui:PrintDebug("Share import failed: " .. tostring(importError))
+      end
       Bagshui:PrintError(L.Error_ImportInvalidFormat)
       return
     end
@@ -420,14 +410,23 @@ Bagshui:AddComponent(function()
     -- Reset the dependency map so it can be built fresh.
     BsUtil.TableClear(self.temp.dependencyMap)
 
-    -- Import objects in the previously determined order.
-    for _, objectList in ipairs(self.importOrder) do
-      if imported[objectList.objectType] then
-        self.temp.dependencyMap[objectList] = {}
-        for exportedId, objectInfo in pairs(imported[objectList.objectType]) do
-          self.temp.dependencyMap[exportedId] = objectList:Import(objectInfo, self.temp.dependencyMap)
+    -- Import objects in the previously determined order. Protect this boundary because
+    -- syntactically valid serialized data may still have an invalid object structure.
+    local importSucceeded, objectImportError = pcall(function()
+      for _, objectList in ipairs(self.importOrder) do
+        if imported[objectList.objectType] then
+          assert(type(imported[objectList.objectType]) == "table")
+          self.temp.dependencyMap[objectList] = {}
+          for exportedId, objectInfo in pairs(imported[objectList.objectType]) do
+            self.temp.dependencyMap[objectList][exportedId] = objectList:Import(objectInfo, self.temp.dependencyMap)
+          end
         end
       end
+    end)
+
+    if not importSucceeded then
+      Bagshui:PrintDebug("Share object import failed: " .. tostring(objectImportError))
+      Bagshui:PrintError(L.Error_ImportInvalidFormat)
     end
   end
 
@@ -450,23 +449,29 @@ Bagshui:AddComponent(function()
   ---@param listFrame any
   function Share:KeepDependenciesSelected(listFrame)
     BsUtil.TableClear(keepDependenciesSelected_listIdsToSelect)
-    -- Build the list of dependencies that need to be selected.
-    for _, entryFrame in ipairs(listFrame.bagshuiData.entryFrames) do
-      if entryFrame.bagshuiData.selected and self.listDependencies[entryFrame.bagshuiData.scrollableListEntry] then
-        for objectList, objectIds in pairs(self.listDependencies[entryFrame.bagshuiData.scrollableListEntry]) do
+
+    -- Selection belongs to logical entries, not recycled viewport frames.
+    for selectedEntry in pairs(listFrame.bagshuiData.selectedEntries) do
+      if self.listDependencies[selectedEntry] then
+        for objectList, objectIds in pairs(self.listDependencies[selectedEntry]) do
           for _, objectId in ipairs(objectIds) do
             keepDependenciesSelected_listIdsToSelect[self:MakeIdentifier(objectList.objectType, objectId)] = true
           end
         end
       end
     end
-    -- Select the dependencies and lock their checkboxes.
-    for _, entryFrame in ipairs(listFrame.bagshuiData.entryFrames) do
-      if keepDependenciesSelected_listIdsToSelect[entryFrame.bagshuiData.scrollableListEntry] then
-        self.objectManager.ui:SetScrollableListEntrySelectionState(listFrame, entryFrame, true)
-        entryFrame.bagshuiData.checkbox:Disable()
+
+    for _, logicalEntry in ipairs(listFrame.bagshuiData.logicalEntries) do
+      logicalEntry.dependencyLocked = keepDependenciesSelected_listIdsToSelect[logicalEntry.entry] or nil
+      if logicalEntry.dependencyLocked then
+        listFrame.bagshuiData.selectedEntries[logicalEntry.entry] = true
       end
     end
+
+    -- Recompute toolbar/single-selection state and update the currently bound
+    -- checkboxes without clearing the logical selection. The callback recursion
+    -- guard in SetScrollableListSelection() prevents re-entering this method.
+    self.objectManager.ui:SetScrollableListSelection(listFrame, nil, true)
   end
 
   --- Build the export interface.

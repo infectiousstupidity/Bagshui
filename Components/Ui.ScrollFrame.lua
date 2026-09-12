@@ -99,11 +99,11 @@ Bagshui:AddComponent(function()
     end
 
     -- Ensure ScrollChild width is kept in sync.
-    scrollFrame:SetScript("OnSizeChanged", function()
-      self:SetScrollChildWidth(_G.this)
+    scrollFrame:SetScript("OnSizeChanged", function(frame)
+      self:SetScrollChildWidth(frame)
     end)
-    scrollFrame:SetScript("OnShow", function()
-      self:SetScrollChildWidth(_G.this)
+    scrollFrame:SetScript("OnShow", function(frame)
+      self:SetScrollChildWidth(frame)
     end)
 
     -- Allow clicking the ScrollFrame to close menus and de-focus fields.
@@ -197,7 +197,6 @@ Bagshui:AddComponent(function()
   ---@param scrollFrame table Return value from `CreateScrolLFrame()`.
   ---@param scrollChild table? WoW frame that is being scrolled by `scrollFrame`. Will attempt to use the `scrollFrame`'s `bagshuiData.scrollChild` property if not provided.
   function Ui:SetScrollChildWidth(scrollFrame, scrollChild)
-    scrollFrame = scrollFrame or _G.this
     -- Grab the Bagshui ScrollChild if one wasn't provided.
     scrollChild = scrollChild or (scrollFrame.bagshuiData and scrollFrame.bagshuiData.scrollChild)
     if not scrollChild then

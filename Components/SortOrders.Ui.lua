@@ -128,8 +128,17 @@ Bagshui:AddComponent(function()
             widgetWidth = 275,
 
             -- Open AddSortField menu when the Add button is clicked.
-            addButtonOnClick = function(listFrame)
-              self.menus:OpenMenu("AddSortField", _G.this, listFrame, _G.this, 0, 0, "TOPLEFT", "BOTTOMLEFT")
+            addButtonOnClick = function(button)
+              self.menus:OpenMenu(
+                "AddSortField",
+                button,
+                button.bagshuiData.listFrame,
+                button,
+                0,
+                0,
+                "TOPLEFT",
+                "BOTTOMLEFT"
+              )
             end,
 
             extraButtons = {

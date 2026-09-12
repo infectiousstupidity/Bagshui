@@ -37,26 +37,26 @@ Bagshui:AddComponent(function()
     -- here instead of as local functions.
     if not self._createEditBox_OnEscape then
       -- Clear focus.
-      function self._createEditBox_OnEscape()
-        _G.this:ClearFocus()
+      function self._createEditBox_OnEscape(editBox)
+        editBox:ClearFocus()
       end
 
       -- Focus tracking.
-      function self._createEditBox_OnFocusGained()
-        _G.this.bagshuiData.hasFocus = true
-        if _G.this.bagshuiData.selectAllOnFocus then
-          _G.this:HighlightText()
+      function self._createEditBox_OnFocusGained(editBox)
+        editBox.bagshuiData.hasFocus = true
+        if editBox.bagshuiData.selectAllOnFocus then
+          editBox:HighlightText()
         end
       end
 
       -- Focus tracking.
-      function self._createEditBox_OnFocusLost()
-        _G.this.bagshuiData.hasFocus = false
+      function self._createEditBox_OnFocusLost(editBox)
+        editBox.bagshuiData.hasFocus = false
       end
 
       -- Reset read-only EditBoxes.
-      function self._createEditBox_ResetReadOnly()
-        self:ResetEditBox(_G.this)
+      function self._createEditBox_ResetReadOnly(editBox)
+        self:ResetEditBox(editBox)
       end
     end
 
@@ -145,25 +145,25 @@ Bagshui:AddComponent(function()
       -- events that fire afterwards. OnCursorChanged subtracts 1 every time it's called,
       -- and will only trigger ScrollingEdit_OnUpdate to adjust scroll once
       -- textChangedProgrammatically <= 0.
-      function self._createScrollableEditBox_OnCursorChanged()
-        self:ResetEditBox(_G.this)
-        if _G.this.bagshuiData.textChangedProgrammatically <= 0 then
-          _G.this.cursorOffset = arg2
-          _G.this.cursorHeight = arg4
+      function self._createScrollableEditBox_OnCursorChanged(editBox, _, cursorOffset, _, cursorHeight)
+        self:ResetEditBox(editBox)
+        if editBox.bagshuiData.textChangedProgrammatically <= 0 then
+          editBox.cursorOffset = cursorOffset
+          editBox.cursorHeight = cursorHeight
         end
-        _G.this.bagshuiData.textChangedProgrammatically = _G.this.bagshuiData.textChangedProgrammatically - 1
+        editBox.bagshuiData.textChangedProgrammatically = editBox.bagshuiData.textChangedProgrammatically - 1
       end
 
-      function self._createScrollableEditBox_OnTextSet()
-        if not _G.this.bagshuiData.scrollToBottomOnTextSet then
-          _G.this.bagshuiData.textChangedProgrammatically = 2
+      function self._createScrollableEditBox_OnTextSet(editBox)
+        if not editBox.bagshuiData.scrollToBottomOnTextSet then
+          editBox.bagshuiData.textChangedProgrammatically = 2
         end
-        _G.this.bagshuiData.scrollFrame:UpdateScrollChildRect()
+        editBox.bagshuiData.scrollFrame:UpdateScrollChildRect()
       end
 
-      function self._createScrollableEditBox_OnTextChanged()
-        self:ResetEditBox(_G.this)
-        _G.this.bagshuiData.scrollFrame:UpdateScrollChildRect()
+      function self._createScrollableEditBox_OnTextChanged(editBox)
+        self:ResetEditBox(editBox)
+        editBox.bagshuiData.scrollFrame:UpdateScrollChildRect()
       end
     end
     editBox.cursorOffset = 0

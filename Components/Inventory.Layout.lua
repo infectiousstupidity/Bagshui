@@ -78,13 +78,32 @@ Bagshui:AddComponent(function()
 
     -- Perform all updates in the necessary order.
     self:ValidateLayout()
-    -- Capture resort signals before ManageDryRun(true) clears forceResort.
-    local needsCategorizeAndSort = self.forceResort or self.resortNeeded
+    -- A resort request without item-specific cache changes comes from profile,
+    -- category, sort-order, or rule-context state and requires a complete pass.
+    local hasChangedItems = next(self.cacheChangedItems) ~= nil
+    local countCanChangeCategory = self.cacheCountChanged
+      and self:ActiveCategoriesUseRuleFunctions({ "Count", "Num", "RecentlyChanged", "Changed", "rc" })
+    local needsFullCategorizeAndSort = (
+      self.forceResort
+      or self.lookupTablesStale
+      or self.cacheBagStructureChanged
+      or self.cacheRuleContextChanged
+      or (self.resortNeeded and not hasChangedItems)
+    )
+    self.selectiveCacheUpdate = hasChangedItems and not needsFullCategorizeAndSort
     self:ManageDryRun(true) -- First call decides whether we're in dry run mode (`self.dryRun`).
     self:UpdateLayoutLookupTables()
-    if self.cacheChanged or self.lookupTablesWereRebuilt or needsCategorizeAndSort then
+    if needsFullCategorizeAndSort or self.lookupTablesWereRebuilt then
       self:CategorizeAndSort()
+    elseif hasChangedItems then
+      self:CategorizeAndSort(
+        self.cacheChangedItems,
+        self.cacheIdentityChanged or countCanChangeCategory,
+        self.cacheIdentityChanged and nil or { count = true, charges = true, bagshuiStockState = true }
+      )
     end
+    self.selectiveCacheUpdate = false
+    self.cacheRuleContextChanged = false
     self:ManageDryRun(false) -- Second call re-points lookup tables if needed and sets `self.enableResortIcon`.
     -- If the dry run shows the layout is identical to last render, the window
     -- update request came only from CategorizeAndSort, and no cache items actually
@@ -98,15 +117,27 @@ Bagshui:AddComponent(function()
       self.windowUpdateNeeded = false
     end
     self.windowUpdateNeededByCategorize = false
-    -- Always refresh item button visual state when the window is visible and
-    -- the full layout rebuild is being skipped (keeps search and highlights current).
+    -- Refresh changed live item references without rebuilding group geometry.
+    -- AssignItemToItemButton updates count, texture, lock state, badges, and cooldown.
     if not self.windowUpdateNeeded and self:Visible() then
+      self:RefreshChangedItemButtons()
       self:UpdateItemSlotColors()
     end
     self:FindSpecialItems()
     self:UpdateWindow()
     self:UpdateBagBar()
     self:UpdateToolbar()
+
+    -- The cache consequence data has now been consumed. Keep it through hidden
+    -- and combat-deferred returns above, but never let it leak into a later
+    -- settings-only update.
+    BsUtil.TableClear(self.cacheChangedItems)
+    BsUtil.TableClear(self.cacheVisualChangedItems)
+    BsUtil.TableClear(self.cacheChangedItemPreviousGroups)
+    BsUtil.TableClear(self.cacheChangedItemPreviousEmpty)
+    self.cacheCountChanged = false
+    self.cacheIdentityChanged = false
+    self.cacheBagStructureChanged = false
 
     -- Reset status.
     self.windowUpdateBlocked = false
@@ -125,6 +156,21 @@ Bagshui:AddComponent(function()
     self.windowUpdateNeeded = true
     self.forceResort = false
     self:Update(cascade)
+  end
+
+  --- Refresh visible buttons backed by cache entries changed in the latest pass.
+  function Inventory:RefreshChangedItemButtons()
+    if not self.cacheChanged then
+      return
+    end
+    for _, button in ipairs(self.ui.buttons.itemSlots) do
+      local buttonInfo = button.bagshuiData
+      if button:IsVisible() and buttonInfo and buttonInfo.item then
+        if self.cacheChangedItems[buttonInfo.item] or self.cacheVisualChangedItems[buttonInfo.item] then
+          self.ui:AssignItemToItemButton(button, buttonInfo.item, buttonInfo.groupId)
+        end
+      end
+    end
   end
 
   --- Refresh only item slot colors without all the overhead of calculating the window layout.
@@ -216,6 +262,32 @@ Bagshui:AddComponent(function()
       -- Reset force resort flag.
       self.forceResort = false
 
+      -- A selective dry run starts from the current item ordering. Proposed
+      -- tables may contain an older dry run and cannot safely be patched as-is.
+      if self.dryRun and self.selectiveCacheUpdate then
+        for groupId, items in pairs(self.proposedLayoutState.groupItems) do
+          BsUtil.TableClear(items)
+        end
+        for groupId, items in pairs(self.currentLayoutState.groupItems) do
+          if not self.proposedLayoutState.groupItems[groupId] then
+            self.proposedLayoutState.groupItems[groupId] = {}
+          end
+          BsUtil.TableCopyFlat(items, self.proposedLayoutState.groupItems[groupId])
+        end
+        -- The remaining lookup state is structural and unchanged during a
+        -- selective pass. Copy it so the first partial update after startup
+        -- does not accidentally trigger a complete lookup/category rebuild.
+        for key, values in pairs(self.currentLayoutState) do
+          if key ~= "groupItems" then
+            if key == "categoryIdsGroupedBySequence" then
+              BsUtil.TableCopy(values, self.proposedLayoutState[key])
+            else
+              BsUtil.TableCopyFlat(values, self.proposedLayoutState[key])
+            end
+          end
+        end
+      end
+
       -- Point layout state tracking keys to the correct tables.
       for key, _ in pairs(self.currentLayoutState) do
         self[key] = self[self.dryRun and "proposedLayoutState" or "currentLayoutState"][key]
@@ -265,19 +337,46 @@ Bagshui:AddComponent(function()
   --- - Cache is stored as `self.inventory[bagNum][slotNum]`
   --- - Group items store references to the inventory cache items:
   ---     `self.groupItems[groupNum][position] = <reference to self.inventory[bagNum][slotNum]>`
-  function Inventory:CategorizeAndSort()
+  function Inventory:CategorizeAndSort(changedItems, recategorizeChangedItems, sortFields)
     --self:PrintDebug("CategorizeAndSort()")
 
-    -- Categorize items and assign to groups.
-    self:CategorizeItems()
+    -- Categorize items and assign to groups. A selective pass returns only the
+    -- groups touched by changed cache entries.
+    local affectedGroups, layoutChanged, dimensionsChanged = self:CategorizeItems(changedItems, recategorizeChangedItems)
 
-    -- Sort items within groups.
-    self:SortGroups()
+    -- Sort all groups for a full pass, or only affected groups whose active sort
+    -- order uses a changed field for a selective pass.
+    if changedItems then
+      for groupId, _ in pairs(affectedGroups) do
+        if not sortFields or self:GroupSortUsesFields(groupId, sortFields) then
+          local before = {}
+          BsUtil.TableCopyFlat(self.groupItems[groupId] or {}, before)
+          self:SortGroups({ [groupId] = true })
+          local after = self.groupItems[groupId] or {}
+          if table.getn(before) ~= table.getn(after) then
+            layoutChanged = true
+          else
+            for index = 1, table.getn(before) do
+              if before[index] ~= after[index] then
+                layoutChanged = true
+                break
+              end
+            end
+          end
+        end
+      end
+    else
+      self:SortGroups()
+      layoutChanged = true
+    end
 
-    -- Reset flags.
+    -- Reset flags. Selective visual/count refreshes do not request an expensive
+    -- layout unless membership, order, empty-slot dimensions, or structure changed.
     self.resortNeeded = false
-    self.windowUpdateNeeded = true
-    self.windowUpdateNeededByCategorize = true
+    if dimensionsChanged or (layoutChanged and not self.dryRun) then
+      self.windowUpdateNeeded = true
+    end
+    self.windowUpdateNeededByCategorize = self.windowUpdateNeededByCategorize or layoutChanged
   end
 
   --- Fill the lookup tables that are used when building the interface.
@@ -411,76 +510,171 @@ Bagshui:AddComponent(function()
   --- - `groupItems` stores the sorted list of items that belong to each group.
   ---
   --- Also updates each item's `bagshuiGroupId` and `bagshuiCategoryId` properties.
-  function Inventory:CategorizeItems()
-    -- groupItems stores the list of items that belongs to each group.
-    -- Start clean each time we categorize and sort.
-
-    -- groupItems is a table of tables, so only wipe the 2nd level tables to keep the garbage collector happy.
-    for groupId, _ in pairs(self.groupItems) do
-      BsUtil.TableClear(self.groupItems[groupId])
-    end
-    -- Using groups instead of activeGroups here just to ensure every possibility is initialized.
-    for groupId, _ in pairs(self.groups) do
-      if not self.groupItems[groupId] then
-        self.groupItems[groupId] = {}
-      end
-    end
-
+  function Inventory:CategorizeItems(changedItems, recategorizeChangedItems)
     local defaultGroupId = self.categoriesToGroups[BsCategories.defaultCategory]
-    local groupId
+    local affectedGroups = {}
+    local layoutChanged = false
+    local dimensionsChanged = false
 
-    -- Perform the actual categorization.
-    for _, bagNum in ipairs(self.containerIds) do
-      -- Only process bags that have contents.
-      if self.containers[bagNum].numSlots > 0 and table.getn(self.inventory[bagNum]) > 0 then
-        -- Process all bag slots.
-        local bagNumSlots = self.containers[bagNum].numSlots
-        if bagNumSlots > 0 then
-          for slotNum = 1, bagNumSlots do
-            -- Categorize each item.
-            -- This must ALWAYS be performed so new items don't show up with an unknown category in the Bagshui tooltip.
+    -- Selective cache updates patch the existing group arrays. This avoids
+    -- evaluating every category rule merely because one slot changed.
+    if changedItems then
+      for item, _ in pairs(changedItems) do
+        local oldGroupId = self.cacheChangedItemPreviousGroups[item]
+        local groupId = item.bagshuiGroupId
+        if string.len(tostring(groupId or "")) == 0 or not self.groupItems[groupId] then
+          groupId = defaultGroupId
+        end
+
+        if recategorizeChangedItems then
+          -- Remove the live item reference from whichever group currently owns it.
+          local removedGroupId
+          local removedIndex
+          for existingGroupId, groupItems in pairs(self.groupItems) do
+            for index = table.getn(groupItems), 1, -1 do
+              if groupItems[index] == item then
+                table.remove(groupItems, index)
+                removedGroupId = existingGroupId
+                removedIndex = index
+                affectedGroups[existingGroupId] = true
+              end
+            end
+          end
+
+          BsCategories:Categorize(
+            item,
+            nil,
+            self.sortedCategorySequenceNumbers,
+            self.categoryIdsGroupedBySequence
+          )
+          groupId = item.bagshuiGroupId
+          if string.len(tostring(groupId or "")) == 0 or not self.groupItems[groupId] then
+            groupId = defaultGroupId
+          end
+          if not self.groupItems[groupId] then
+            self.groupItems[groupId] = {}
+          end
+          -- Preserve the existing position when category membership did not
+          -- change. A following sort may still move it when a relevant field did.
+          if removedGroupId == groupId and removedIndex then
+            table.insert(self.groupItems[groupId], math.min(removedIndex, table.getn(self.groupItems[groupId]) + 1), item)
+          else
+            table.insert(self.groupItems[groupId], item)
+          end
+        end
+        affectedGroups[groupId] = true
+
+        if oldGroupId ~= groupId then
+          layoutChanged = true
+        end
+        if self.cacheChangedItemPreviousEmpty[item] ~= (item.emptySlot == 1) then
+          layoutChanged = true
+          dimensionsChanged = true
+        end
+        if not self.dryRun and item.emptySlot == 1 then
+          item._bagshuiPreventEmptySlotStack = nil
+        end
+      end
+    else
+      -- Full categorization path used for startup, profiles, category changes,
+      -- bag structure changes, and explicit recovery refreshes.
+      for groupId, _ in pairs(self.groupItems) do
+        BsUtil.TableClear(self.groupItems[groupId])
+      end
+      for groupId, _ in pairs(self.groups) do
+        if not self.groupItems[groupId] then
+          self.groupItems[groupId] = {}
+        end
+      end
+
+      for _, bagNum in ipairs(self.containerIds) do
+        if self.containers[bagNum].numSlots > 0 and table.getn(self.inventory[bagNum]) > 0 then
+          for slotNum = 1, self.containers[bagNum].numSlots do
+            local item = self.inventory[bagNum][slotNum]
             BsCategories:Categorize(
-              self.inventory[bagNum][slotNum],
-              nil, -- Categorization as any alternate character is not currently enabled.
+              item,
+              nil,
               self.sortedCategorySequenceNumbers,
               self.categoryIdsGroupedBySequence
             )
-
-            -- Fall back to the default group if one wasn't assigned.
-            groupId = self.inventory[bagNum][slotNum].bagshuiGroupId
-            if string.len(tostring(groupId or "")) == 0 then
+            local groupId = item.bagshuiGroupId
+            if string.len(tostring(groupId or "")) == 0 or not self.groupItems[groupId] then
               groupId = defaultGroupId
             end
-
-            -- Empty slots are now allowed to stack since they've been through the categorizing process.
-            -- (When an empty slot is first seen during a cache update, it gets the _bagshuiPreventEmptySlotStack
-            -- property set so that empty slots don't just "disappear" into a stack when the window is open
-            -- and the user moves an item out of a slot.)
-            if not self.dryRun and self.inventory[bagNum][slotNum].emptySlot == 1 then
-              self.inventory[bagNum][slotNum]._bagshuiPreventEmptySlotStack = nil
+            if not self.dryRun and item.emptySlot == 1 then
+              item._bagshuiPreventEmptySlotStack = nil
             end
+            table.insert(self.groupItems[groupId], item)
+          end
+        end
+      end
+    end
 
-            -- Final safety check to ensure we don't somehow try to assign to a group that doesn't exist.
-            if not self.groupItems[groupId] then
-              groupId = defaultGroupId
-            end
-
-            -- Add to group positions lookup table.
-            table.insert(self.groupItems[groupId], self.inventory[bagNum][slotNum])
-          end -- bagNumSlots loop
-        end -- bagNumSlots > 0
-      end -- Known bag check
-    end -- self.containerIds loop
-
-    -- Show the error button if there were problems.
     self.errorText = BsCategories:GetErrors(self.activeCategoryIds)
+    return affectedGroups, layoutChanged, dimensionsChanged
+  end
+
+  --- Return true when an active category expression invokes one of the named
+  --- built-in rule functions. MatchCategory is treated conservatively because
+  --- its dependency can live in another category.
+  function Inventory:ActiveCategoriesUseRuleFunctions(functionNames)
+    local function ruleUses(rule)
+      if type(rule) ~= "string" then
+        return false
+      end
+      local normalizedRule = string.lower(rule)
+      if string.find(normalizedRule, "matchcategory%s*%(") then
+        return true
+      end
+      for _, functionName in ipairs(functionNames) do
+        if string.find(normalizedRule, string.lower(functionName) .. "%s*%(") then
+          return true
+        end
+      end
+      return false
+    end
+
+    for categoryId, _ in pairs(self.activeCategoryIds) do
+      local category = BsCategories.list[categoryId]
+      if category then
+        if ruleUses(category.rule) then
+          return true
+        end
+        for _, classCategory in pairs(category.classes or {}) do
+          if ruleUses(classCategory.rule) then
+            return true
+          end
+        end
+      end
+    end
+    return false
+  end
+
+  --- Return true if a group's selected sort order uses any field in `fields`.
+  function Inventory:GroupSortUsesFields(groupId, fields)
+    local groupConfig = self.activeGroups[groupId]
+    local sortOrderId = (
+      groupConfig
+      and groupConfig.sortOrder
+      and BsSortOrders.list[groupConfig.sortOrder]
+      and groupConfig.sortOrder
+    ) or self.settings.defaultSortOrder or BS_DEFAULT_SORT_ORDER_ID
+    local sortOrder = BsSortOrders.list[sortOrderId] or BsSortOrders.list[BS_DEFAULT_SORT_ORDER_ID]
+    for _, sortField in ipairs((sortOrder and sortOrder.fields) or {}) do
+      if fields[sortField.field] then
+        return true
+      end
+    end
+    return false
   end
 
   -- Sort each group's items in the configured order.
   -- **Should not be called directly!** Use `Inventory:Update()` to coordinate the process.
-  function Inventory:SortGroups()
+  function Inventory:SortGroups(groupsToSort)
     for groupId, groupConfig in pairs(self.activeGroups) do
-      BsSortOrders:SortGroup(self.groupItems[groupId], groupConfig, self.settings.defaultSortOrder)
+      if not groupsToSort or groupsToSort[groupId] then
+        BsSortOrders:SortGroup(self.groupItems[groupId], groupConfig, self.settings.defaultSortOrder)
+      end
     end
   end
 

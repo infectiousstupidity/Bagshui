@@ -1115,8 +1115,6 @@ event == "BAGSHUI_SETTING_UPDATE"
 
       -- Show usage info on mouseover.
       managerListEntryOnEnter = function(this, modifierKeyRefresh)
-        this = this or _G.this
-
         -- Must have metadata about this object.
         if
           not (
@@ -1193,7 +1191,6 @@ event == "BAGSHUI_SETTING_UPDATE"
         end
       end,
       managerListEntryOnLeave = function(this)
-        this = this or _G.this
         if _G.GameTooltip:IsOwned(this) then
           _G.GameTooltip:Hide()
         end

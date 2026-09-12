@@ -105,13 +105,13 @@ Bagshui:AddComponent(function()
     }
 
     local oldOnEnter = widget:GetScript("OnEnter")
-    widget:SetScript("OnEnter", function()
+    widget:SetScript("OnEnter", function(widgetFrame, ...)
       if oldOnEnter then
-        oldOnEnter()
+        oldOnEnter(widgetFrame, ...)
       end
       if holdingFrame.bagshuiData.tooltipTitle or holdingFrame.bagshuiData.tooltipText then
         _G.GameTooltip:ClearLines()
-        _G.GameTooltip_SetDefaultAnchor(_G.GameTooltip, _G.this)
+        _G.GameTooltip_SetDefaultAnchor(_G.GameTooltip, widgetFrame)
         if holdingFrame.bagshuiData.tooltipTitle then
           _G.GameTooltip:AddLine(
             holdingFrame.bagshuiData.tooltipTitle,
@@ -125,17 +125,17 @@ Bagshui:AddComponent(function()
           _G.GameTooltip:AddLine(tooltipText, nil, nil, nil, true)
         end
         _G.GameTooltip:SetWidth(10)
-        Bagshui:ShowTooltipAfterDelay(_G.GameTooltip, _G.this, holdingFrame)
+        Bagshui:ShowTooltipAfterDelay(_G.GameTooltip, widgetFrame, holdingFrame)
       end
     end)
 
     local oldOnLeave = widget:GetScript("OnLeave")
-    widget:SetScript("OnLeave", function()
+    widget:SetScript("OnLeave", function(widgetFrame, ...)
       if oldOnLeave then
-        oldOnLeave()
+        oldOnLeave(widgetFrame, ...)
       end
-      if _G.GameTooltip:IsOwned(_G.this) then
-        Bagshui:ShortenTooltipDelay(_G.this, true)
+      if _G.GameTooltip:IsOwned(widgetFrame) then
+        Bagshui:ShortenTooltipDelay(widgetFrame, true)
         _G.GameTooltip:Hide()
       end
     end)
@@ -167,7 +167,10 @@ Bagshui:AddComponent(function()
         and source:HasScript(event)
         and dest:HasScript(event)
       then
-        source:SetScript(event, dest:GetScript(event))
+        local destScript = dest:GetScript(event)
+        source:SetScript(event, function(_, ...)
+          return destScript(dest, ...)
+        end)
       end
     end
   end

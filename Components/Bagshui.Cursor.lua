@@ -211,13 +211,10 @@ _G.CursorHasItem()
   end
 
   --- Reset our cursor item tracking when the cursor is emptied.
+  --- This only updates Bagshui state. Protected Blizzard cursor functions are
+  --- post-hooked below so their secure execution context is never replaced.
   ---@param wowApiFunctionName string? Hooked WoW API function that triggered this call.
   function Bagshui:ClearCursor(wowApiFunctionName)
-    -- Protected functions cannot be called from addon code during combat lockdown.
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
-      return
-    end
-
     self.cursorItem = nil
     if self.cursorItemOwningFrame then
       self.cursorItemOwningFrame.bagshuiData.hasCursorItem = nil
@@ -231,7 +228,6 @@ _G.CursorHasItem()
     if wowApiFunctionName == "DeleteCursorItem" then
       self.lastCursorItemUniqueId = nil
     end
-    self.hooks:OriginalHook(wowApiFunctionName)
   end
 
   --- Clear our cursor tracking if nothing is held.
@@ -296,8 +292,8 @@ _G.CursorHasItem()
     self:QueueClassCallback(self, self.CheckCursor)
   end
 
-  -- Register post-hooks for protected cursor functions so the original runs
-  -- in its secure execution context during combat.
+  -- Register post-hooks for protected cursor functions so the originals run
+  -- in their secure execution context during combat.
   _G.hooksecurefunc("PickupInventoryItem", function(invSlotId)
     Bagshui:PickupInventoryItemPostHook("PickupInventoryItem", invSlotId)
   end)
@@ -306,5 +302,11 @@ _G.CursorHasItem()
   end)
   _G.hooksecurefunc("PutItemInBag", function(slotId)
     Bagshui:PickupInventoryItemPostHook("PutItemInBag", slotId)
+  end)
+  _G.hooksecurefunc("ClearCursor", function()
+    Bagshui:ClearCursor("ClearCursor")
+  end)
+  _G.hooksecurefunc("DeleteCursorItem", function()
+    Bagshui:ClearCursor("DeleteCursorItem")
   end)
 end)

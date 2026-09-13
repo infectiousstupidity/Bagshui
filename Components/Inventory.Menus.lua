@@ -292,7 +292,7 @@ Bagshui:AddComponent(function()
           text = L.Rename,
           tooltipTitle = L.Menu_Group_Rename_TooltipTitle,
           tooltipText = L.Menu_Group_Rename_TooltipText,
-          func = function(groupId)
+          func = function(_, groupId)
             self:RenameGroup(groupId, false)
           end,
         },
@@ -300,7 +300,7 @@ Bagshui:AddComponent(function()
           text = L.Move,
           tooltipTitle = L.Menu_Group_Move_TooltipTitle,
           tooltipText = L.Menu_Group_Move_TooltipText,
-          func = function(groupId)
+          func = function(_, groupId)
             self:EditModePickUpGroup(groupId)
           end,
         },
@@ -308,7 +308,7 @@ Bagshui:AddComponent(function()
           text = L.Delete,
           tooltipTitle = L.Menu_Group_Delete_TooltipTitle,
           tooltipText = L.Menu_Group_Delete_TooltipText,
-          func = function(groupId)
+          func = function(_, groupId)
             self:DeleteGroup(groupId)
           end,
         },
@@ -479,7 +479,7 @@ Bagshui:AddComponent(function()
             _bagshuiCheckedFunc = function(groupId)
               return (self.groups[groupId] and self.groups[groupId].hide) or not self.groups[groupId]
             end,
-            func = function(groupId)
+            func = function(_, groupId)
               if not self.groups[groupId] then
                 return
               end
@@ -508,7 +508,7 @@ Bagshui:AddComponent(function()
             _bagshuiCheckedFunc = function(groupId)
               return (self.groups[groupId] and self.groups[groupId].background == nil) or not self.groups[groupId]
             end,
-            func = function(groupId)
+            func = function(_, groupId)
               if not self.groups[groupId] then
                 return
               end
@@ -538,7 +538,7 @@ Bagshui:AddComponent(function()
             _bagshuiCheckedFunc = function(groupId)
               return (self.groups[groupId] and self.groups[groupId].border == nil) or not self.groups[groupId]
             end,
-            func = function(groupId)
+            func = function(_, groupId)
               if not self.groups[groupId] then
                 return
               end
@@ -568,7 +568,7 @@ Bagshui:AddComponent(function()
             _bagshuiCheckedFunc = function(groupId)
               return (self.groups[groupId] and self.groups[groupId].label == nil) or not self.groups[groupId]
             end,
-            func = function(groupId)
+            func = function(_, groupId)
               if not self.groups[groupId] then
                 return
               end
@@ -680,7 +680,7 @@ Bagshui:AddComponent(function()
     -- Item Menu.
 
     -- Shared OnClick function for itemInfo submenu to display the itemInfo window.
-    local function showItemInfo(item)
+    local function showItemInfo(_, item)
       Bagshui:CloseMenus()
       BsItemInfo:Open(item)
     end
@@ -719,7 +719,7 @@ Bagshui:AddComponent(function()
               _bagshuiTextureR = 1,
               _bagshuiTextureG = 1,
               _bagshuiTextureB = 1,
-              func = function(item, bagInfo)
+              func = function(_, item, bagInfo)
                 Bagshui:CloseMenus()
                 bagInfo.inventoryClass:SwapBag(item, bagInfo.containerId)
               end,
@@ -750,7 +750,7 @@ Bagshui:AddComponent(function()
           text = L.Move,
           tooltipTitle = string.format(L.Prefix_Move, L.Category),
           tooltipText = L.Menu_Category_Move_TooltipText,
-          func = function(_, categoryId)
+          func = function(_, _, categoryId)
             self:EditModePickUpCategory(categoryId, true)
           end,
         },
@@ -759,7 +759,7 @@ Bagshui:AddComponent(function()
           text = L.Remove,
           tooltipTitle = string.format(L.Prefix_Remove, L.Category),
           tooltipText = L.Menu_Category_Remove_TooltipText,
-          func = function(groupId, categoryId)
+          func = function(_, groupId, categoryId)
             self:RemoveCategoryFromGroup(categoryId, groupId)
             self:EditModeWindowUpdate(true)
           end,
@@ -769,7 +769,7 @@ Bagshui:AddComponent(function()
           text = string.format(L.Symbol_Ellipsis, L.Edit),
           tooltipTitle = string.format(L.Prefix_Edit, L.Category),
           tooltipText = L.Menu_Category_Edit_TooltipText,
-          func = function(_, categoryId)
+          func = function(_, _, categoryId)
             BsCategories:EditObject(categoryId)
             self:CloseMenusAndClearFocuses()
           end,
@@ -818,7 +818,7 @@ Bagshui:AddComponent(function()
           text = L.Menu_Item_MarkForSale,
           tooltipTitle = L.Menu_Item_MarkForSale,
           tooltipText = L.Menu_Item_MarkForSale_TooltipText,
-          func = function(item)
+          func = function(_, item)
             Bagshui.components.Bags:ToggleItemMarkedForSale(item)
             self:CloseMenusAndClearFocuses()
           end,
@@ -828,7 +828,7 @@ Bagshui:AddComponent(function()
           tooltipTitle = string.format(L.Prefix_Move, L.Item),
           tooltipText = L.Menu_Item_Move_TooltipText,
           _bagshuiMenuItemId = "ItemMove",
-          func = function(item)
+          func = function(_, item)
             self:EditModePickUpItem(item)
           end,
         },
@@ -972,7 +972,7 @@ Bagshui:AddComponent(function()
             tooltipText = L.Menu_Item_RemoveFromEquippedGear_TooltipText,
             disabled = true,
             keepShownOnClick = false,
-            func = function(item)
+            func = function(_, item)
               BsCharacter:RemoveFromEquippedGear(item.itemString)
               self:CloseMenusAndClearFocuses()
             end,
@@ -984,7 +984,7 @@ Bagshui:AddComponent(function()
             tooltipText = L.Menu_Item_ResetStockState_TooltipText,
             disabled = true,
             keepShownOnClick = false,
-            func = function(item)
+            func = function(_, item)
               self:ResetStockState()
             end,
           },

@@ -905,6 +905,18 @@ Bagshui:AddComponent(function()
       local hadDeferredUpdate = self.combatDeferredUpdate
       self.combatDeferredUpdate = nil
 
+      -- Repair cursor bookkeeping and UI state that had to be deferred while
+      -- Bags was using the secure combat visibility path.
+      if self.inventoryType == BS_INVENTORY_TYPE.BAGS then
+        Bagshui:CheckCursor()
+
+        if self.combatHideCleanupDeferred and not self:Visible() then
+          self:UiFrame_OnHide()
+        elseif self.actionBarBagStateDeferred then
+          self:UpdateActionBarBagSlotButtonState()
+        end
+      end
+
       if self:Visible() then
         if self.openedViaSecurePanel then
           self:RestoreNormalVisibilityAfterCombat()

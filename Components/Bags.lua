@@ -79,8 +79,16 @@ Bagshui:AddComponent(function()
 
   --- Ensure the Blizzard action bar bag buttons are un-highlighted when the Bags window is closed.
   function Bags:UiFrame_OnHide()
+    -- Secure UIPanel hiding can fire this while protected child buttons are
+    -- locked down. Defer UI cleanup until combat ends.
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+      self.combatHideCleanupDeferred = true
+      self.actionBarBagStateDeferred = true
+      return
+    end
+
+    self.combatHideCleanupDeferred = nil
     self._super.UiFrame_OnHide(self)
-    -- It's safe to instantly un-highlight the action bar bag buttons when the window is closed.
     self:UpdateActionBarBagSlotButtonState()
   end
 
@@ -88,6 +96,12 @@ Bagshui:AddComponent(function()
   --- Set Blizzard action bar bag slot buttons to "checked" (highlighted) when our
   --- window is open and unchecked when it's closed.
   function Bags:UpdateActionBarBagSlotButtonState()
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+      self.actionBarBagStateDeferred = true
+      return
+    end
+
+    self.actionBarBagStateDeferred = nil
     local shouldBeChecked = self:Visible()
     local actionBarButtonName, actionBarButton
 

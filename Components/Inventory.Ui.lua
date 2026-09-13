@@ -1126,6 +1126,10 @@ Bagshui:AddComponent(function()
   --- - Top toolbar hidden if it was temporarily visible.
   --- - Pending trade-with-another player item cleared.
   function Inventory:UiFrame_OnShow()
+    -- If the frame was hidden and reopened during the same combat, the old
+    -- deferred hide cleanup no longer describes the current visible state.
+    self.combatHideCleanupDeferred = nil
+
     if self.dockTo then
       -- Used by SetDockedToFrameVisibility() to decide whether the  frame to which this
       -- one is docked should also be closed when this frame is closed.
@@ -1443,16 +1447,41 @@ Bagshui:AddComponent(function()
     then
       local restoreFrames = {}
       if _G.GetUIPanel then
-        for _, panelKey in ipairs({ "left", "center", "right", "doublewide" }) do
+        for _, panelKey in ipairs({ "left", "center", "right", "doublewide", "fullscreen" }) do
           local panelFrame = _G.GetUIPanel(panelKey)
           if panelFrame and panelFrame ~= self.uiFrame then
             table.insert(restoreFrames, panelFrame)
           end
         end
       end
+
+      -- A native center panel with allowOtherPanels=false makes Blizzard's
+      -- CanOpenPanels() reject this left-side panel before the force flag is
+      -- considered. Hide that blocker through the secure UIPanel path first.
+      local centerPanel = _G.GetUIPanel and _G.GetUIPanel("center") or nil
+      local centerPanelBlocked = (
+        centerPanel
+        and centerPanel ~= self.uiFrame
+        and _G.GetUIPanelWindowInfo
+        and _G.GetUIPanelWindowInfo(centerPanel, "area") == "center"
+        and not _G.GetUIPanelWindowInfo(centerPanel, "allowOtherPanels")
+      )
+      if centerPanelBlocked and _G.HideUIPanel then
+        _G.HideUIPanel(centerPanel, true)
+      end
+
       self.securePanelRestoreFrames = restoreFrames
-      self.openedViaSecurePanel = true
-      _G.ShowUIPanel(self.uiFrame)
+      _G.ShowUIPanel(self.uiFrame, true)
+      self.openedViaSecurePanel = self.uiFrame:IsVisible()
+
+      -- Do not leave the state machine thinking a failed secure open succeeded,
+      -- and restore a center panel we explicitly hid if the open was rejected.
+      if not self.openedViaSecurePanel then
+        self.securePanelRestoreFrames = nil
+        if centerPanelBlocked and centerPanel and not centerPanel:IsVisible() and _G.ShowUIPanel then
+          _G.ShowUIPanel(centerPanel, true)
+        end
+      end
     elseif not frameWasVisible then
       self.securePanelRestoreFrames = nil
       self.openedViaSecurePanel = false
@@ -1479,6 +1508,7 @@ Bagshui:AddComponent(function()
         return
       end
 
+      local restoreFrames = self.openedViaSecurePanel and self.securePanelRestoreFrames or nil
       if (self.securePanelVisibility or self.openedViaSecurePanel) and _G.HideUIPanel then
         _G.HideUIPanel(self.uiFrame, true)
       elseif not (_G.InCombatLockdown and _G.InCombatLockdown()) then
@@ -1486,6 +1516,16 @@ Bagshui:AddComponent(function()
       end
       self.openedViaSecurePanel = false
       self.securePanelRestoreFrames = nil
+
+      -- If the user closes Bags before combat ends, restore any panel displaced
+      -- by the secure combat-open path now instead of losing it permanently.
+      if restoreFrames and _G.ShowUIPanel then
+        for _, frame in ipairs(restoreFrames) do
+          if frame and frame ~= self.uiFrame and not frame:IsVisible() then
+            _G.ShowUIPanel(frame, true)
+          end
+        end
+      end
     end
   end
 

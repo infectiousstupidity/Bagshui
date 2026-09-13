@@ -785,9 +785,7 @@ local Bagshui = {
   -- ```
   ---@type table<string, string>
   apiFunctionsToHook = {
-    ClearCursor = "ClearCursor",
     CloseAllWindows = "CloseAllWindows",
-    DeleteCursorItem = "ClearCursor",
     MoneyFrame_UpdateMoney = "MoneyFrame_UpdateMoney",
     OpenStackSplitFrame = "OpenStackSplitFrame",
     ToggleDropDownMenu = "ToggleDropDownMenu",

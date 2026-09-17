@@ -55,6 +55,7 @@ Don't move things around unless you're sure it won't break anything.
   <Include file="Components\Ui.Dialog.lua" />
   <Include file="Components\Ui.EditBox.lua" />
   <Include file="Components\Ui.ItemButton.lua" />
+  <Include file="Components\Ui.ItemButton.QualityColor.lua" />
   <Include file="Components\Ui.ScrollFrame.lua" />
   <Include file="Components\Ui.ScrollableList.lua" />
   <Include file="Components\Ui.ScrollableTextWindow.lua" />

@@ -311,20 +311,15 @@ Bagshui:LoadComponent(function()
   end
 
   --- Display progress using the cooldown radar animation.
-  --- Basically a dupe of `CooldownFrame_SetTimer()`.
-  --- Needed for two reasons:
-  --- 1. The Vanilla version of OmniCC doesn't support the `noCooldownCount` property
-  ---    and essentially provides no way to prevent number display. It works by hooking
-  ---    `CooldownFrame_SetTimer()`, so we need to avoid that call.
-  --- 2. It's cleaner than calculating these numbers inline.
+  --- Call the frame method directly instead of `CooldownFrame_SetTimer()` so
+  --- cooldown-count addons don't add text to this progress indicator.
   ---@param cooldown table Cooldown frame.
   ---@param progressPercent number 0-100.
   function Ui:ShowProgressViaCooldown(cooldown, progressPercent)
     if type(progressPercent) == "number" and progressPercent > 0 then
-      cooldown.start = _G.GetTime() - (1000 - ((100 - progressPercent) * 10))
-      cooldown.duration = 1000
-      cooldown.stopping = 0
-      cooldown:SetSequence(0)
+      local duration = 1000
+      local start = _G.GetTime() - (duration - ((100 - progressPercent) * 10))
+      cooldown:SetCooldown(start, duration)
       cooldown:Show()
     else
       cooldown:Hide()
